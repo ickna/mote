@@ -190,6 +190,7 @@ canvas{display:block;width:100%;height:100%}
                     <span style="font-size:11px;opacity:.5" id="v-edgeShimmer">Off</span>
                   </label>
                 </div>
+                <div class="param-row"><label>Transition</label><input type="range" id="p-transitionDuration" min="0" max="3000" step="100"><span class="param-val" id="v-transitionDuration"></span></div>
               </div>
 
               <div class="btn-row">
@@ -275,6 +276,7 @@ const DEFAULT_PARAMS = {
   renderMode: 'dots',
   trails: false,
   edgeShimmer: false,
+  transitionDuration: 800,
   lineThreshold: 60
 };
 
@@ -329,6 +331,7 @@ let yawAngle = 0, pitchAngle = 0;
 let yRotEnabled = true;
 const keys = {};
 let edgeParticles = []; // edge particles for shimmer effect
+let transition = null; // { startTime, duration, oldParticles, oldEdgeParticles }
 
 // ── URL mode ──────────────────────────────────────────────────
 const urlParams = new URLSearchParams(window.location.search);
@@ -1021,6 +1024,44 @@ function frame(t) {
       }
     }
 
+    // Preset transition: crossfade old particles
+    if (transition) {
+      const elapsed = t - transition.startTime;
+      const progress = Math.min(1, elapsed / transition.duration);
+      if (progress < 1 && transition.oldParticles.length) {
+        const fadeAlpha = 1 - progress;
+        const oldP = p;
+        // Render old particles with fading alpha
+        const oldProjected = [];
+        for (const pt of transition.oldParticles) {
+          const waveX = oldP.waveAmp * Math.sin(t * oldP.waveFreq + pt.phase + pt.ty * 0.01);
+          const waveY = oldP.waveAmp * 0.6 * Math.cos(t * oldP.waveFreq * 1.2 + pt.phase * 0.7 + pt.tx * 0.008);
+          const waveZ = oldP.waveAmp * 1.5 * Math.sin(t * oldP.waveFreq * 0.9 + pt.phase * 1.1 + pt.ty * 0.006);
+          const targetX = pt.tx + waveX, targetY = pt.ty + waveY;
+          const targetZ = pt.tz + waveZ;
+          const ry = rotateY(targetX, targetZ, yaw);
+          const r3d = rotateX(targetY, ry.z, pitch);
+          pt.vx = (pt.vx + (ry.x - pt.x) * oldP.spring) * oldP.damping;
+          pt.vy = (pt.vy + (r3d.y - pt.y) * oldP.spring) * oldP.damping;
+          pt.vz = (pt.vz + (r3d.z - pt.z) * oldP.spring) * oldP.damping;
+          pt.x += pt.vx; pt.y += pt.vy; pt.z += pt.vz;
+          const zOff = pt.z + 200;
+          const sc2 = FOCAL / (FOCAL + zOff);
+          oldProjected.push({
+            px: pt.x * sc2 + cx - lw / 2 * sc2,
+            py: pt.y * sc2 + cy - lh / 2 * sc2,
+            r: Math.max(pt.size * sc2 * 1.5, 0.3),
+            z: zOff,
+            alpha: Math.max(0.15, Math.min(1, oldP.depthFade ? Math.min(1, (zOff + 100) / 300) : 1)) * fadeAlpha
+          });
+        }
+        oldProjected.sort((a, b) => a.z - b.z);
+        const oldMode = RENDER_MODES[oldP.renderMode] || RENDER_MODES.dots;
+        oldMode.draw(ctx, oldProjected, oldP, t);
+      }
+      if (progress >= 1) transition = null;
+    }
+
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
   } catch (e) {
@@ -1147,6 +1188,15 @@ function getPreset() {
 }
 
 function loadPreset(preset) {
+  // Save current state for transition
+  if (engineReady && particles.length > 0) {
+    transition = {
+      startTime: performance.now(),
+      duration: params.transitionDuration || 800,
+      oldParticles: particles.map(pt => ({ ...pt })),
+      oldEdgeParticles: edgeParticles.map(ep => ({ ...ep }))
+    };
+  }
   presetName = preset.name || 'unnamed';
   applyParams(preset.params || DEFAULT_PARAMS);
   loadSVG(preset.svg || ICKNA_SVG);
@@ -1175,7 +1225,8 @@ const paramBindings = [
   { id: 'glowBlur', el: 'p-glowBlur', val: 'v-glowBlur', min: 0, max: 20, step: 1 },
   { id: 'depthFade', el: 'p-depthFade', val: 'v-depthFade', min: 0, max: 1, step: 0.05 },
   { id: 'scale', el: 'p-scale', val: 'v-scale', min: 0.1, max: 1.5, step: 0.05 },
-  { id: 'lineThreshold', el: 'p-lineThreshold', val: 'v-lineThreshold', min: 20, max: 200, step: 2 }
+  { id: 'lineThreshold', el: 'p-lineThreshold', val: 'v-lineThreshold', min: 20, max: 200, step: 2 },
+  { id: 'transitionDuration', el: 'p-transitionDuration', val: 'v-transitionDuration', min: 0, max: 3000, step: 100 }
 ];
 
 function initUI() {
