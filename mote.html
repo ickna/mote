@@ -368,10 +368,24 @@ const MoteSVG = {
 
   drawElement(ctx, el) {
     const tag = el.tagName.toLowerCase();
+    const fill = el.getAttribute('fill');
+    const stroke = el.getAttribute('stroke');
+    const strokeWidth = parseFloat(el.getAttribute('stroke-width')) || 1;
+    const useStroke = fill === 'none' || fill === 'transparent' || tag === 'line';
+    const useFill = !useStroke && stroke !== 'none';
+
+    if (useStroke) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = Math.max(strokeWidth, 1);
+    }
+
     switch (tag) {
       case 'path': {
         const d = el.getAttribute('d');
-        if (d) ctx.fill(new Path2D(d));
+        if (!d) break;
+        const p = new Path2D(d);
+        if (useFill) ctx.fill(p);
+        if (useStroke) ctx.stroke(p);
         break;
       }
       case 'circle': {
@@ -380,7 +394,8 @@ const MoteSVG = {
         const r = parseFloat(el.getAttribute('r')) || 0;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fill();
+        if (useFill) ctx.fill();
+        if (useStroke) ctx.stroke();
         break;
       }
       case 'rect': {
@@ -397,7 +412,8 @@ const MoteSVG = {
         } else {
           ctx.rect(x, y, w, h);
         }
-        ctx.fill();
+        if (useFill) ctx.fill();
+        if (useStroke) ctx.stroke();
         break;
       }
       case 'ellipse': {
@@ -408,7 +424,8 @@ const MoteSVG = {
         if (!rx || !ry) break;
         ctx.beginPath();
         ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-        ctx.fill();
+        if (useFill) ctx.fill();
+        if (useStroke) ctx.stroke();
         break;
       }
       case 'polygon':
@@ -422,7 +439,8 @@ const MoteSVG = {
           else ctx.lineTo(coords[i], coords[i + 1]);
         }
         if (tag === 'polygon') ctx.closePath();
-        ctx.fill();
+        if (useFill) ctx.fill();
+        if (useStroke) ctx.stroke();
         break;
       }
       case 'line': {
@@ -440,12 +458,39 @@ const MoteSVG = {
   },
 
   applyTransform(ctx, transformStr) {
-    // Parse matrix(a,b,c,d,e,f)
-    const m = transformStr.match(/matrix\(([^)]+)\)/);
-    if (m) {
-      const vals = m[1].split(/[\s,]+/).map(Number);
-      if (vals.length === 6) {
-        ctx.transform(vals[0], vals[1], vals[2], vals[3], vals[4], vals[5]);
+    // Parse combined transforms: "translate(10,20) scale(2) rotate(45)"
+    const re = /(\w+)\s*\(([^)]*)\)/g;
+    let match;
+    while ((match = re.exec(transformStr)) !== null) {
+      const fn = match[1];
+      const args = match[2].split(/[,\s]+/).map(Number).filter(n => !isNaN(n));
+      switch (fn) {
+        case 'matrix':
+          if (args.length >= 6) ctx.transform(args[0], args[1], args[2], args[3], args[4], args[5]);
+          break;
+        case 'translate':
+          ctx.translate(args[0] || 0, args[1] || 0);
+          break;
+        case 'rotate': {
+          const angle = (args[0] || 0) * Math.PI / 180;
+          if (args.length >= 3) {
+            ctx.translate(args[1], args[2]);
+            ctx.rotate(angle);
+            ctx.translate(-args[1], -args[2]);
+          } else {
+            ctx.rotate(angle);
+          }
+          break;
+        }
+        case 'scale':
+          ctx.scale(args[0] || 1, args[1] || args[0] || 1);
+          break;
+        case 'skewX':
+          ctx.transform(1, 0, Math.tan((args[0] || 0) * Math.PI / 180), 1, 0, 0);
+          break;
+        case 'skewY':
+          ctx.transform(1, Math.tan((args[0] || 0) * Math.PI / 180), 0, 1, 0, 0);
+          break;
       }
     }
   },
@@ -1341,20 +1386,84 @@ async function init() {
 function fallbackRender(svgStr, c, tctx, p) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(svgStr, 'image/svg+xml');
-  tctx.fillStyle = '#fff';
-  doc.querySelectorAll('path').forEach(path => {
-    const d = path.getAttribute('d');
-    if (d) tctx.fill(new Path2D(d));
-  });
-  doc.querySelectorAll('circle').forEach(circ => {
-    const cx = parseFloat(circ.getAttribute('cx')) || 0;
-    const cy = parseFloat(circ.getAttribute('cy')) || 0;
-    const r = parseFloat(circ.getAttribute('r')) || 0;
-    tctx.beginPath(); tctx.arc(cx, cy, r, 0, Math.PI * 2); tctx.fill();
-  });
+  const svg = doc.querySelector('svg');
+  let svgW = 400, svgH = 300;
+  const vb = svg ? svg.getAttribute('viewBox') : null;
+  if (vb) { const pts = vb.split(/[\\s,]+/).map(Number); svgW = pts[2] - pts[0]; svgH = pts[3] - pts[1]; }
+  else { svgW = parseInt(svg.getAttribute('width')) || 400; svgH = parseInt(svg.getAttribute('height')) || 300; }
+  const s = c.width / svgW;
+  tctx.fillStyle = '#fff'; tctx.strokeStyle = '#fff'; tctx.lineWidth = 2;
+  const elements = doc.querySelectorAll('path, circle, rect, ellipse, polygon, polyline, line');
+  for (const el of elements) {
+    tctx.save();
+    tctx.scale(s, s);
+    let parent = el.parentElement;
+    while (parent && parent.tagName === 'g') {
+      const t = parent.getAttribute('transform');
+      if (t) applyTransform(tctx, t);
+      parent = parent.parentElement;
+    }
+    drawElement(tctx, el);
+    tctx.restore();
+  }
   logoCanvas = c;
   sampleParticles(p);
   loop();
+}
+
+function applyTransform(ctx, ts) {
+  const re = /(\\w+)\\s*\\(([^)]*)\\)/g; let m;
+  while ((m = re.exec(ts)) !== null) {
+    const fn = m[1], args = m[2].split(/[,\\s]+/).map(Number).filter(n => !isNaN(n));
+    switch (fn) {
+      case 'matrix': if (args.length >= 6) ctx.transform(args[0], args[1], args[2], args[3], args[4], args[5]); break;
+      case 'translate': ctx.translate(args[0] || 0, args[1] || 0); break;
+      case 'rotate': {
+        const a = (args[0] || 0) * Math.PI / 180;
+        if (args.length >= 3) { ctx.translate(args[1], args[2]); ctx.rotate(a); ctx.translate(-args[1], -args[2]); }
+        else ctx.rotate(a);
+        break;
+      }
+      case 'scale': ctx.scale(args[0] || 1, args[1] || args[0] || 1); break;
+      case 'skewX': ctx.transform(1, 0, Math.tan((args[0] || 0) * Math.PI / 180), 1, 0, 0); break;
+      case 'skewY': ctx.transform(1, Math.tan((args[0] || 0) * Math.PI / 180), 0, 1, 0, 0); break;
+    }
+  }
+}
+
+function drawElement(ctx, el) {
+  const tag = el.tagName.toLowerCase();
+  const fill = el.getAttribute('fill');
+  const stroke = el.getAttribute('stroke');
+  const sw = parseFloat(el.getAttribute('stroke-width')) || 1;
+  const useStroke = fill === 'none' || fill === 'transparent' || tag === 'line';
+  const useFill = !useStroke && stroke !== 'none';
+  if (useStroke) { ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(sw, 1); }
+  switch (tag) {
+    case 'path': { const d = el.getAttribute('d'); if (d) { const p = new Path2D(d); if (useFill) ctx.fill(p); if (useStroke) ctx.stroke(p); } break; }
+    case 'circle': { const cx = parseFloat(el.getAttribute('cx')) || 0, cy = parseFloat(el.getAttribute('cy')) || 0, r = parseFloat(el.getAttribute('r')) || 0; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); if (useFill) ctx.fill(); if (useStroke) ctx.stroke(); break; }
+    case 'rect': {
+      const x = parseFloat(el.getAttribute('x')) || 0, y = parseFloat(el.getAttribute('y')) || 0, w = parseFloat(el.getAttribute('width')), h = parseFloat(el.getAttribute('height'));
+      if (!w || !h) break;
+      const rx = parseFloat(el.getAttribute('rx')) || 0, ry = parseFloat(el.getAttribute('ry')) || rx;
+      ctx.beginPath();
+      if (rx || ry) ctx.roundRect(x, y, w, h, Math.min(rx, w / 2), Math.min(ry, h / 2));
+      else ctx.rect(x, y, w, h);
+      if (useFill) ctx.fill(); if (useStroke) ctx.stroke();
+      break;
+    }
+    case 'ellipse': { const cx = parseFloat(el.getAttribute('cx')) || 0, cy = parseFloat(el.getAttribute('cy')) || 0, rx = parseFloat(el.getAttribute('rx')) || 0, ry = parseFloat(el.getAttribute('ry')) || 0; if (!rx || !ry) break; ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); if (useFill) ctx.fill(); if (useStroke) ctx.stroke(); break; }
+    case 'polygon':
+    case 'polyline': {
+      const pts = el.getAttribute('points'); if (!pts) break;
+      const coords = pts.trim().split(/[,\\s]+/).map(Number); ctx.beginPath();
+      for (let i = 0; i < coords.length - 1; i += 2) { if (i === 0) ctx.moveTo(coords[i], coords[i + 1]); else ctx.lineTo(coords[i], coords[i + 1]); }
+      if (tag === 'polygon') ctx.closePath();
+      if (useFill) ctx.fill(); if (useStroke) ctx.stroke();
+      break;
+    }
+    case 'line': { const x1 = parseFloat(el.getAttribute('x1')) || 0, y1 = parseFloat(el.getAttribute('y1')) || 0, x2 = parseFloat(el.getAttribute('x2')) || 0, y2 = parseFloat(el.getAttribute('y2')) || 0; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); break; }
+  }
 }
 
 function sampleParticles(p) {
