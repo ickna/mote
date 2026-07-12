@@ -48,11 +48,11 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Shape-aware depth, breathing particles, convergence fade, wave cycling, keyboard controls.
 
-- [ ] Edge-distance depth: compute edge particles from SVG, store `edgeDist` per particle, use animated sine wave for tz (interior bulges, edges flat)
-- [ ] Convergence fade-in: `convergeAlpha` based on distance from target position — smooth initial settling
-- [ ] Size pulse: `sizePulse = 1.4 + 0.4 * sin(t * freq + phase)` — particles breathe
-- [ ] Wave origin cycling: cycle through logo geometry nodes for wave origin
-- [ ] Keyboard controls: arrow keys for manual rotation, `/` to toggle auto-yaw
+- [x] Edge-distance depth: compute edge particles from SVG, store `edgeDist` per particle, use animated sine wave for tz (interior bulges, edges flat)
+- [x] Convergence fade-in: `convergeAlpha` based on distance from target position — smooth initial settling
+- [x] Size pulse: `sizePulse = 1.4 + 0.4 * sin(t * freq + phase)` — particles breathe
+- [x] Wave origin cycling: cycle through logo geometry nodes for wave origin
+- [x] Keyboard controls: arrow keys for manual rotation, `/` to toggle auto-yaw
 
 ## Phase 2.5 — Edge Shimmer
 
