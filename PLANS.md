@@ -58,10 +58,10 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Edge particles with sparkle/shine along the logo outline.
 
-- [ ] Edge particle sampling: detect outline pixels from SVG, store as separate layer
-- [ ] Sparkle system: random flare probability, bright white dot + glow
-- [ ] Edge-to-main connection lines (optional layer)
-- [ ] Toggle in editor UI, serialized in presets
+- [x] Edge particle sampling: detect outline pixels from SVG, store as separate layer
+- [x] Sparkle system: random flare probability, bright white dot + glow
+- [x] Edge-to-main connection lines (optional layer)
+- [x] Toggle in editor UI, serialized in presets
 
 ## Phase 2.6 — Preset Transitions
 
