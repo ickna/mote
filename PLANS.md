@@ -28,12 +28,12 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Handle all common SVG elements found in real-world SVGs.
 
-- [ ] Single `renderElement(ctx, el)` dispatch for all element types
-- [ ] `<rect>` with optional `rx`/`ry`
-- [ ] `<ellipse>`
-- [ ] `<polygon>` / `<polyline>` — parse `points` attribute
-- [ ] `<line>`
-- [ ] Handle `translate`, `rotate`, `scale`, `skewX`, `skewY` transforms (not just `matrix()`)
+- [x] Single `renderElement(ctx, el)` dispatch for all element types
+- [x] `<rect>` with optional `rx`/`ry`
+- [x] `<ellipse>`
+- [x] `<polygon>` / `<polyline>` — parse `points` attribute
+- [x] `<line>`
+- [x] Handle `translate`, `rotate`, `scale`, `skewX`, `skewY` transforms (not just `matrix()`)
 
 ## Phase 2.3 — Color Palettes & Gradients
 
