@@ -148,6 +148,26 @@ canvas{display:block;width:100%;height:100%}
         <div class="param-row"><label>Glow Blur</label><input type="range" id="p-glowBlur" min="0" max="20" step="1"><span class="param-val" id="v-glowBlur"></span></div>
         <div class="param-row"><label>Depth Fade</label><input type="range" id="p-depthFade" min="0" max="1" step="0.05"><span class="param-val" id="v-depthFade"></span></div>
         <div class="param-row"><label>Color</label><input type="color" id="p-color"><span class="param-val" id="v-color"></span></div>
+                <div class="param-row color-secondary-row" style="display:none"><label>Color 2</label><input type="color" id="p-colorSecondary"><span class="param-val" id="v-colorSecondary"></span></div>
+                <div class="param-row"><label>Color Mode</label>
+                  <select id="p-colorMode" style="flex:1;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:11px;font-family:inherit">
+                    <option value="solid">Solid</option>
+                    <option value="gradient-z">Z Gradient</option>
+                    <option value="gradient-position">Position</option>
+                    <option value="gradient-random">Random</option>
+                  </select>
+                </div>
+                <div class="param-row"><label>Palette</label>
+                  <select id="p-palette" style="flex:1;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:11px;font-family:inherit">
+                    <option value="custom">Custom</option>
+                    <option value="fire">Fire</option>
+                    <option value="ocean">Ocean</option>
+                    <option value="aurora">Aurora</option>
+                    <option value="sunset">Sunset</option>
+                    <option value="neon">Neon</option>
+                    <option value="monochrome">Monochrome</option>
+                  </select>
+                </div>
                 <div class="param-row"><label>Scale</label><input type="range" id="p-scale" min="0.1" max="1.5" step="0.05"><span class="param-val" id="v-scale"></span></div>
                 <div class="param-row"><label>Render Mode</label>
                   <select id="p-renderMode" style="flex:1;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:11px;font-family:inherit">
@@ -243,11 +263,48 @@ const DEFAULT_PARAMS = {
   glowBlur: 3,
   depthFade: 0.6,
   color: '#e03030',
+  colorSecondary: '#7b2ff7',
+  colorMode: 'solid',
   scale: 0.80,
   renderMode: 'dots',
   trails: false,
   lineThreshold: 60
 };
+
+// ═══════════════════════════════════════════════════════════════
+// Color Helpers
+// ═══════════════════════════════════════════════════════════════
+
+const PALETTES = {
+  custom: { name: 'Custom', colors: ['#e03030', '#7b2ff7'] },
+  fire: { name: 'Fire', colors: ['#e03030', '#ff6b35', '#f7c59f'] },
+  ocean: { name: 'Ocean', colors: ['#00d4ff', '#0077b6', '#023e8a'] },
+  aurora: { name: 'Aurora', colors: ['#00ff87', '#60efff', '#7b2ff7'] },
+  sunset: { name: 'Sunset', colors: ['#ff6b35', '#e03030', '#7b2ff7'] },
+  neon: { name: 'Neon', colors: ['#ff00ff', '#00ffff', '#ffff00'] },
+  monochrome: { name: 'Monochrome', colors: ['#e03030', '#901818', '#400808'] }
+};
+
+function hexToRgb(hex) {
+  return { r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16) };
+}
+
+function lerpRgb(rgb1, rgb2, t) {
+  const t2 = Math.max(0, Math.min(1, t));
+  return `rgb(${Math.round(rgb1.r + (rgb2.r - rgb1.r) * t2)},${Math.round(rgb1.g + (rgb2.g - rgb1.g) * t2)},${Math.round(rgb1.b + (rgb2.b - rgb1.b) * t2)})`;
+}
+
+function getParticleColor(pt, p, rgb1, rgb2) {
+  if (p.colorMode === 'solid' || !rgb2) return p.color;
+  let t;
+  switch (p.colorMode) {
+    case 'gradient-z': t = (pt.z + 100) / 400; break;
+    case 'gradient-position': t = ((pt.px + pt.py) / 800 + 0.5) % 1; break;
+    case 'gradient-random': t = (pt.phase / (Math.PI * 2)); break;
+    default: return p.color;
+  }
+  return lerpRgb(rgb1, rgb2, t);
+}
 
 // ── State ─────────────────────────────────────────────────────
 let params = { ...DEFAULT_PARAMS };
@@ -578,10 +635,13 @@ const RENDER_MODES = {
   dots: {
     name: 'Dots',
     draw(ctx, projected, p) {
-      ctx.fillStyle = p.color;
-      ctx.shadowColor = p.color;
-      ctx.shadowBlur = p.glowBlur;
+      const rgb1 = hexToRgb(p.color);
+      const rgb2 = p.colorSecondary && p.colorMode !== 'solid' ? hexToRgb(p.colorSecondary) : null;
       for (const pt of projected) {
+        const c = getParticleColor(pt, p, rgb1, rgb2);
+        ctx.fillStyle = c;
+        ctx.shadowColor = c;
+        ctx.shadowBlur = p.glowBlur;
         ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.alpha));
         ctx.beginPath();
         ctx.arc(pt.px, pt.py, pt.r, 0, Math.PI * 2);
@@ -594,6 +654,8 @@ const RENDER_MODES = {
     name: 'Connected Lines',
     draw(ctx, projected, p) {
       const threshold = p.lineThreshold || 60;
+      const rgb1 = hexToRgb(p.color);
+      const rgb2 = p.colorSecondary && p.colorMode !== 'solid' ? hexToRgb(p.colorSecondary) : null;
       const cellSize = threshold;
       const grid = new Map();
       for (let i = 0; i < projected.length; i++) {
@@ -606,10 +668,11 @@ const RENDER_MODES = {
       }
 
       // Draw dots first
-      ctx.fillStyle = p.color;
-      ctx.shadowColor = p.color;
       ctx.shadowBlur = p.glowBlur;
       for (const pt of projected) {
+        const c = getParticleColor(pt, p, rgb1, rgb2);
+        ctx.fillStyle = c;
+        ctx.shadowColor = c;
         ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.alpha));
         ctx.beginPath();
         ctx.arc(pt.px, pt.py, pt.r * 0.6, 0, Math.PI * 2);
@@ -618,7 +681,6 @@ const RENDER_MODES = {
 
       // Draw connections
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = p.color;
       ctx.lineWidth = 0.5;
       let drawn = 0;
       const maxLines = 200;
@@ -643,6 +705,8 @@ const RENDER_MODES = {
               const dist = Math.sqrt(dx2 * dx2 + dy2 * dy2);
               if (dist <= threshold) {
                 const lineAlpha = Math.min(a.alpha, b.alpha) * 0.4;
+                const midPt = { px: (a.px + b.px) / 2, py: (a.py + b.py) / 2, z: (a.z + b.z) / 2, phase: (a.phase + b.phase) / 2 };
+                ctx.strokeStyle = getParticleColor(midPt, p, rgb1, rgb2);
                 ctx.globalAlpha = lineAlpha;
                 ctx.beginPath();
                 ctx.moveTo(a.px, a.py);
@@ -665,6 +729,8 @@ const RENDER_MODES = {
     draw(ctx, projected, p, t) {
       const frameNum = Math.floor(t / 500); // recompute every ~500ms
       const cacheKey = frameNum + ':' + projected.length + ':' + (p.lineThreshold || 60);
+      const rgb1 = hexToRgb(p.color);
+      const rgb2 = p.colorSecondary && p.colorMode !== 'solid' ? hexToRgb(p.colorSecondary) : null;
 
       let edges;
       if (this._cacheKey === cacheKey && this._edgeCache) {
@@ -676,10 +742,11 @@ const RENDER_MODES = {
       }
 
       // Draw dots
-      ctx.fillStyle = p.color;
-      ctx.shadowColor = p.color;
       ctx.shadowBlur = p.glowBlur;
       for (const pt of projected) {
+        const c = getParticleColor(pt, p, rgb1, rgb2);
+        ctx.fillStyle = c;
+        ctx.shadowColor = c;
         ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.alpha));
         ctx.beginPath();
         ctx.arc(pt.px, pt.py, pt.r * 0.5, 0, Math.PI * 2);
@@ -688,12 +755,13 @@ const RENDER_MODES = {
 
       // Draw mesh edges
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = p.color;
       ctx.lineWidth = 0.5;
       for (let k = 0; k < edges.length; k += 2) {
         const i = edges[k], j = edges[k + 1];
         const a = projected[i], b = projected[j];
         const lineAlpha = Math.min(a.alpha, b.alpha) * 0.3;
+        const midPt = { px: (a.px + b.px) / 2, py: (a.py + b.py) / 2, z: (a.z + b.z) / 2, phase: (a.phase + b.phase) / 2 };
+        ctx.strokeStyle = getParticleColor(midPt, p, rgb1, rgb2);
         ctx.globalAlpha = lineAlpha;
         ctx.beginPath();
         ctx.moveTo(a.px, a.py);
@@ -753,6 +821,8 @@ const RENDER_MODES = {
         }
       }
 
+      const rgb1 = hexToRgb(p.color);
+      const rgb2 = p.colorSecondary && p.colorMode !== 'solid' ? hexToRgb(p.colorSecondary) : null;
       ctx.shadowBlur = 0;
       ctx.globalCompositeOperation = 'lighter';
 
@@ -762,7 +832,14 @@ const RENDER_MODES = {
         const snap = size <= 4 ? 4 : size <= 8 ? 8 : size <= 16 ? 16 : 32;
         const tex = this._cache[snap];
         if (!tex) continue;
-        ctx.globalAlpha = Math.max(0.05, Math.min(0.6, pt.alpha));
+        const c = getParticleColor(pt, p, rgb1, rgb2);
+        // Draw a small colored dot, then additive blend the glow texture
+        ctx.fillStyle = c;
+        ctx.globalAlpha = Math.max(0.05, Math.min(0.4, pt.alpha));
+        ctx.beginPath();
+        ctx.arc(pt.px, pt.py, pt.r * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = Math.max(0.05, Math.min(0.4, pt.alpha));
         ctx.drawImage(tex, pt.px - snap, pt.py - snap, snap * 2, snap * 2);
       }
 
@@ -991,6 +1068,47 @@ function initUI() {
     });
   }
 
+  // Color mode select
+  const colorModeSelect = document.getElementById('p-colorMode');
+  if (colorModeSelect) {
+    colorModeSelect.value = params.colorMode;
+    updateSecondaryColorVisibility(params.colorMode);
+    colorModeSelect.addEventListener('change', () => {
+      params.colorMode = colorModeSelect.value;
+      updateSecondaryColorVisibility(params.colorMode);
+    });
+  }
+
+  // Secondary color picker
+  const color2Input = document.getElementById('p-colorSecondary');
+  const color2Val = document.getElementById('v-colorSecondary');
+  if (color2Input) {
+    color2Input.value = params.colorSecondary;
+    color2Val.textContent = params.colorSecondary;
+    color2Input.addEventListener('input', () => {
+      params.colorSecondary = color2Input.value;
+      color2Val.textContent = color2Input.value;
+    });
+  }
+
+  // Palette select
+  const paletteSelect = document.getElementById('p-palette');
+  if (paletteSelect) {
+    paletteSelect.value = 'custom';
+    paletteSelect.addEventListener('change', () => {
+      const pal = PALETTES[paletteSelect.value];
+      if (pal && pal.colors.length >= 2) {
+        params.color = pal.colors[0];
+        params.colorSecondary = pal.colors[1] || pal.colors[0];
+        document.getElementById('p-color').value = params.color;
+        document.getElementById('v-color').textContent = params.color;
+        document.getElementById('p-colorSecondary').value = params.colorSecondary;
+        document.getElementById('v-colorSecondary').textContent = params.colorSecondary;
+        paletteSelect.value = 'custom'; // reset to custom after applying
+      }
+    });
+  }
+
   // Tab switching
   document.querySelectorAll('.panel-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -1095,6 +1213,11 @@ function formatVal(val, step) {
   return Math.round(val).toString();
 }
 
+function updateSecondaryColorVisibility(mode) {
+  const row = document.querySelector('.color-secondary-row');
+  if (row) row.style.display = (mode !== 'solid') ? '' : 'none';
+}
+
 function updateLineThresholdVisibility(mode) {
   const row = document.querySelector('.line-threshold-row');
   if (row) row.style.display = (mode === 'lines' || mode === 'triangles') ? '' : 'none';
@@ -1114,6 +1237,12 @@ function updateUI() {
   const trailsCheck = document.getElementById('p-trails');
   const trailsLabel = document.getElementById('v-trails');
   if (trailsCheck) { trailsCheck.checked = params.trails; trailsLabel.textContent = params.trails ? 'On' : 'Off'; }
+  const colorModeSelect = document.getElementById('p-colorMode');
+  if (colorModeSelect) { colorModeSelect.value = params.colorMode; }
+  const color2Input = document.getElementById('p-colorSecondary');
+  const color2Val = document.getElementById('v-colorSecondary');
+  if (color2Input) { color2Input.value = params.colorSecondary; color2Val.textContent = params.colorSecondary; }
+  updateSecondaryColorVisibility(params.colorMode);
   updateLineThresholdVisibility(params.renderMode);
 }
 
@@ -1241,8 +1370,11 @@ function rotateY(x, z, a) {
 const RENDER_MODES = {
   dots: {
     draw(ctx, g, p) {
-      ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = p.glowBlur || 3;
+      const r1 = _h2r(p.color);
+      const r2 = p.colorSecondary && p.colorMode !== 'solid' ? _h2r(p.colorSecondary) : null;
       for (const pt of g) {
+        const c = _gpc(pt, p, r1, r2);
+        ctx.fillStyle = c; ctx.shadowColor = c; ctx.shadowBlur = p.glowBlur || 3;
         ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.a));
         ctx.beginPath(); ctx.arc(pt.px, pt.py, pt.r, 0, Math.PI * 2); ctx.fill();
       }
@@ -1251,34 +1383,31 @@ const RENDER_MODES = {
   lines: {
     draw(ctx, g, p) {
       const thr = p.lineThreshold || 60, cs = thr;
+      const r1 = _h2r(p.color);
+      const r2 = p.colorSecondary && p.colorMode !== 'solid' ? _h2r(p.colorSecondary) : null;
       const grid = new Map();
-      for (let i = 0; i < g.length; i++) {
-        const k = Math.floor(g[i].px / cs) + ',' + Math.floor(g[i].py / cs);
-        if (!grid.has(k)) grid.set(k, []);
-        grid.get(k).push(i);
-      }
-      ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = p.glowBlur || 3;
+      for (let i = 0; i < g.length; i++) { const k = Math.floor(g[i].px / cs) + ',' + Math.floor(g[i].py / cs); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(i); }
+      ctx.shadowBlur = p.glowBlur || 3;
       for (const pt of g) {
+        const c = _gpc(pt, p, r1, r2); ctx.fillStyle = c; ctx.shadowColor = c;
         ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.a));
         ctx.beginPath(); ctx.arc(pt.px, pt.py, pt.r * 0.6, 0, Math.PI * 2); ctx.fill();
       }
-      ctx.shadowBlur = 0; ctx.strokeStyle = p.color; ctx.lineWidth = 0.5;
+      ctx.shadowBlur = 0; ctx.lineWidth = 0.5;
       let drawn = 0; const seen = new Set();
       for (let i = 0; i < g.length && drawn < 200; i++) {
         const a = g[i], cx = Math.floor(a.px / cs), cy = Math.floor(a.py / cs);
         for (let dx = -1; dx <= 1 && drawn < 200; dx++) {
           for (let dy = -1; dy <= 1 && drawn < 200; dy++) {
-            const nb = grid.get((cx + dx) + ',' + (cy + dy));
-            if (!nb) continue;
+            const nb = grid.get((cx + dx) + ',' + (cy + dy)); if (!nb) continue;
             for (const j of nb) {
               if (j <= i) continue;
-              const ek = i < j ? i + '-' + j : j + '-' + i;
-              if (seen.has(ek)) continue;
-              seen.add(ek);
-              const b = g[j];
-              const d = Math.sqrt((a.px - b.px) ** 2 + (a.py - b.py) ** 2);
+              const ek = i < j ? i + '-' + j : j + '-' + i; if (seen.has(ek)) continue; seen.add(ek);
+              const b = g[j]; const d = Math.sqrt((a.px - b.px) ** 2 + (a.py - b.py) ** 2);
               if (d <= thr) {
                 ctx.globalAlpha = Math.min(a.a, b.a) * 0.4;
+                const mp = { px: (a.px + b.px) / 2, py: (a.py + b.py) / 2, z: (a.z + b.z) / 2, phase: 0 };
+                ctx.strokeStyle = _gpc(mp, p, r1, r2);
                 ctx.beginPath(); ctx.moveTo(a.px, a.py); ctx.lineTo(b.px, b.py); ctx.stroke();
                 drawn++;
               }
@@ -1307,17 +1436,22 @@ const RENDER_MODES = {
     },
     draw(ctx, g, p, t) {
       const fn = Math.floor(t / 500), ck = fn + ':' + g.length + ':' + (p.lineThreshold || 60);
+      const r1 = _h2r(p.color);
+      const r2 = p.colorSecondary && p.colorMode !== 'solid' ? _h2r(p.colorSecondary) : null;
       let edges;
       if (this._ck === ck && this._ec) { edges = this._ec; }
       else { edges = this._tri(g, p.lineThreshold || 80); this._ec = edges; this._ck = ck; }
-      ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = p.glowBlur || 3;
+      ctx.shadowBlur = p.glowBlur || 3;
       for (const pt of g) {
+        const c = _gpc(pt, p, r1, r2); ctx.fillStyle = c; ctx.shadowColor = c;
         ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.a));
         ctx.beginPath(); ctx.arc(pt.px, pt.py, pt.r * 0.5, 0, Math.PI * 2); ctx.fill();
       }
-      ctx.shadowBlur = 0; ctx.strokeStyle = p.color; ctx.lineWidth = 0.5;
+      ctx.shadowBlur = 0; ctx.lineWidth = 0.5;
       for (let k = 0; k < edges.length; k += 2) {
         const a = g[edges[k]], b = g[edges[k + 1]];
+        const mp = { px: (a.px + b.px) / 2, py: (a.py + b.py) / 2, z: (a.z + b.z) / 2, phase: 0 };
+        ctx.strokeStyle = _gpc(mp, p, r1, r2);
         ctx.globalAlpha = Math.min(a.a, b.a) * 0.3;
         ctx.beginPath(); ctx.moveTo(a.px, a.py); ctx.lineTo(b.px, b.py); ctx.stroke();
       }
@@ -1329,8 +1463,7 @@ const RENDER_MODES = {
       if (!this._cache) {
         this._cache = {};
         for (const s of [2, 4, 8, 16, 32]) {
-          const c = document.createElement('canvas');
-          c.width = s * 2; c.height = s * 2;
+          const c = document.createElement('canvas'); c.width = s * 2; c.height = s * 2;
           const t = c.getContext('2d');
           const gr = t.createRadialGradient(s, s, 0, s, s, s);
           gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.1, 'rgba(255,255,255,0.8)');
@@ -1339,20 +1472,39 @@ const RENDER_MODES = {
           this._cache[s] = c;
         }
       }
+      const r1 = _h2r(p.color);
+      const r2 = p.colorSecondary && p.colorMode !== 'solid' ? _h2r(p.colorSecondary) : null;
       ctx.shadowBlur = 0; ctx.globalCompositeOperation = 'lighter';
       for (const pt of g) {
-        const s = Math.round(pt.r * 2);
-        if (s < 1) continue;
+        const s = Math.round(pt.r * 2); if (s < 1) continue;
         const snap = s <= 4 ? 4 : s <= 8 ? 8 : s <= 16 ? 16 : 32;
-        const tex = this._cache[snap];
-        if (!tex) continue;
-        ctx.globalAlpha = Math.max(0.05, Math.min(0.6, pt.a));
+        const tex = this._cache[snap]; if (!tex) continue;
+        const c = _gpc(pt, p, r1, r2);
+        ctx.fillStyle = c;
+        ctx.globalAlpha = Math.max(0.05, Math.min(0.4, pt.a));
+        ctx.beginPath(); ctx.arc(pt.px, pt.py, pt.r * 0.3, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = Math.max(0.05, Math.min(0.4, pt.a));
         ctx.drawImage(tex, pt.px - snap, pt.py - snap, snap * 2, snap * 2);
       }
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
     }
   }
 };
+
+function _h2r(h) { return { r: parseInt(h.slice(1, 3), 16), g: parseInt(h.slice(3, 5), 16), b: parseInt(h.slice(5, 7), 16) }; }
+function _lerp(a, b, t) { return a + (b - a) * t; }
+function _gpc(pt, p, r1, r2) {
+  if (p.colorMode === 'solid' || !r2) return p.color;
+  let t;
+  switch (p.colorMode) {
+    case 'gradient-z': t = (pt.z + 100) / 400; break;
+    case 'gradient-position': t = ((pt.px + pt.py) / 800 + 0.5) % 1; break;
+    case 'gradient-random': t = 0.5; break;
+    default: return p.color;
+  }
+  const t2 = Math.max(0, Math.min(1, t));
+  return 'rgb(' + Math.round(_lerp(r1.r, r2.r, t2)) + ',' + Math.round(_lerp(r1.g, r2.g, t2)) + ',' + Math.round(_lerp(r1.b, r2.b, t2)) + ')';
+}
 
 async function init() {
   const p = PRESET.params;
