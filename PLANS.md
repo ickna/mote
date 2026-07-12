@@ -6,23 +6,23 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Fix bugs and wire unused params before adding features.
 
-- [ ] Fix `renderPathsDirect` — add `<rect>`, `<ellipse>`, `<polygon>`, `<polyline>`, `<line>` handlers
-- [ ] Fix transform stacking — apply parent `g[transform]` after SVG-to-canvas scale, not before
-- [ ] Wire `zDispersion` param — replace hardcoded `tz` formula in `sample()`
-- [ ] Wire `sizeMin`/`sizeMax` params — replace hardcoded size in particle generation
-- [ ] Remove `setInterval` crutch — self-healing `requestAnimationFrame` loop
-- [ ] Wire `sizeMin`/`sizeMax` in `frame()` — read from params instead of `pt.size`
+- [x] Fix `renderPathsDirect` — add `<rect>`, `<ellipse>`, `<polygon>`, `<polyline>`, `<line>` handlers
+- [x] Fix transform stacking — apply parent `g[transform]` after SVG-to-canvas scale, not before
+- [x] Wire `zDispersion` param — replace hardcoded `tz` formula in `sample()`
+- [x] Wire `sizeMin`/`sizeMax` params — replace hardcoded size in particle generation
+- [x] Remove `setInterval` crutch — self-healing `requestAnimationFrame` loop
+- [x] Wire `sizeMin`/`sizeMax` in `frame()` — read from params instead of `pt.size`
 
 ## Phase 2.1 — Rendering Modes
 
 **Goal:** Multiple visual modes switchable in editor, serialized in presets.
 
-- [ ] Create render mode registry (`dots`, `lines`, `triangles`, `glow`)
-- [ ] Add `renderMode` param, dropdown in editor UI
-- [ ] Lines mode: spatial-grid distance threshold, cap at 200 connections/frame
-- [ ] Triangles mode: incremental Delaunay, cache edges, recompute every 30 frames
-- [ ] Glow mode: pre-rendered radial gradient canvases, `drawImage` per particle
-- [ ] Trails mode: semi-transparent overlay instead of `clearRect`
+- [x] Create render mode registry (`dots`, `lines`, `triangles`, `glow`)
+- [x] Add `renderMode` param, dropdown in editor UI
+- [x] Lines mode: spatial-grid distance threshold, cap at 200 connections/frame
+- [x] Triangles mode: nearest-neighbor triangulation, cache edges, recompute every 500ms
+- [x] Glow mode: pre-rendered radial gradient canvases, `drawImage` per particle
+- [x] Trails mode: semi-transparent overlay instead of `clearRect`
 
 ## Phase 2.2 — SVG Import Expansion
 
