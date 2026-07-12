@@ -147,15 +147,30 @@ canvas{display:block;width:100%;height:100%}
         <div class="param-row"><label>Size Max</label><input type="range" id="p-sizeMax" min="1" max="16" step="0.5"><span class="param-val" id="v-sizeMax"></span></div>
         <div class="param-row"><label>Glow Blur</label><input type="range" id="p-glowBlur" min="0" max="20" step="1"><span class="param-val" id="v-glowBlur"></span></div>
         <div class="param-row"><label>Depth Fade</label><input type="range" id="p-depthFade" min="0" max="1" step="0.05"><span class="param-val" id="v-depthFade"></span></div>
-        <div class="param-row color-row"><label>Color</label><input type="color" id="p-color"><span class="param-val" id="v-color"></span></div>
-        <div class="param-row"><label>Scale</label><input type="range" id="p-scale" min="0.1" max="1.5" step="0.05"><span class="param-val" id="v-scale"></span></div>
-      </div>
+        <div class="param-row"><label>Color</label><input type="color" id="p-color"><span class="param-val" id="v-color"></span></div>
+                <div class="param-row"><label>Scale</label><input type="range" id="p-scale" min="0.1" max="1.5" step="0.05"><span class="param-val" id="v-scale"></span></div>
+                <div class="param-row"><label>Render Mode</label>
+                  <select id="p-renderMode" style="flex:1;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:11px;font-family:inherit">
+                    <option value="dots">Dots</option>
+                    <option value="lines">Connected Lines</option>
+                    <option value="triangles">Triangles</option>
+                    <option value="glow">Glow Field</option>
+                  </select>
+                </div>
+                <div class="param-row line-threshold-row" style="display:none"><label>Line Threshold</label><input type="range" id="p-lineThreshold" min="20" max="200" step="2"><span class="param-val" id="v-lineThreshold"></span></div>
+                <div class="param-row"><label>Trails</label>
+                  <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="checkbox" id="p-trails" style="accent-color:var(--accent)">
+                    <span style="font-size:11px;opacity:.5" id="v-trails">Off</span>
+                  </label>
+                </div>
+              </div>
 
-      <div class="btn-row">
-        <button class="btn-sm primary" id="btn-reset-particles">Reset Particles</button>
-        <button class="btn-sm" id="btn-reset-defaults">Reset Defaults</button>
-      </div>
-    </div>
+              <div class="btn-row">
+                <button class="btn-sm primary" id="btn-reset-particles">Reset Particles</button>
+                <button class="btn-sm" id="btn-reset-defaults">Reset Defaults</button>
+              </div>
+            </div>
 
     <!-- ── SVG TAB ── -->
     <div class="panel-tab-content" data-tab="svg" style="display:none">
@@ -228,7 +243,10 @@ const DEFAULT_PARAMS = {
   glowBlur: 3,
   depthFade: 0.6,
   color: '#e03030',
-  scale: 0.80
+  scale: 0.80,
+  renderMode: 'dots',
+  trails: false,
+  lineThreshold: 60
 };
 
 // ── State ─────────────────────────────────────────────────────
@@ -507,15 +525,223 @@ function rotateY(x, z, angle) {
   return { x: x * c - z * s, z: x * s + z * c };
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Render Modes
+// ═══════════════════════════════════════════════════════════════
+
+const RENDER_MODES = {
+  dots: {
+    name: 'Dots',
+    draw(ctx, projected, p) {
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = p.glowBlur;
+      for (const pt of projected) {
+        ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.alpha));
+        ctx.beginPath();
+        ctx.arc(pt.px, pt.py, pt.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  },
+
+  lines: {
+    name: 'Connected Lines',
+    draw(ctx, projected, p) {
+      const threshold = p.lineThreshold || 60;
+      const cellSize = threshold;
+      const grid = new Map();
+      for (let i = 0; i < projected.length; i++) {
+        const pt = projected[i];
+        const cx = Math.floor(pt.px / cellSize);
+        const cy = Math.floor(pt.py / cellSize);
+        const key = cx + ',' + cy;
+        if (!grid.has(key)) grid.set(key, []);
+        grid.get(key).push(i);
+      }
+
+      // Draw dots first
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = p.glowBlur;
+      for (const pt of projected) {
+        ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.alpha));
+        ctx.beginPath();
+        ctx.arc(pt.px, pt.py, pt.r * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Draw connections
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 0.5;
+      let drawn = 0;
+      const maxLines = 200;
+      const seen = new Set();
+
+      for (let i = 0; i < projected.length && drawn < maxLines; i++) {
+        const a = projected[i];
+        const cx = Math.floor(a.px / cellSize);
+        const cy = Math.floor(a.py / cellSize);
+        for (let dx = -1; dx <= 1 && drawn < maxLines; dx++) {
+          for (let dy = -1; dy <= 1 && drawn < maxLines; dy++) {
+            const key = (cx + dx) + ',' + (cy + dy);
+            const neighbors = grid.get(key);
+            if (!neighbors) continue;
+            for (const j of neighbors) {
+              if (j <= i) continue;
+              const edgeKey = i < j ? i + '-' + j : j + '-' + i;
+              if (seen.has(edgeKey)) continue;
+              seen.add(edgeKey);
+              const b = projected[j];
+              const dx2 = a.px - b.px, dy2 = a.py - b.py;
+              const dist = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+              if (dist <= threshold) {
+                const lineAlpha = Math.min(a.alpha, b.alpha) * 0.4;
+                ctx.globalAlpha = lineAlpha;
+                ctx.beginPath();
+                ctx.moveTo(a.px, a.py);
+                ctx.lineTo(b.px, b.py);
+                ctx.stroke();
+                drawn++;
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+
+  triangles: {
+    name: 'Triangles',
+    _lastFrame: 0,
+    _edgeCache: null,
+    _cacheKey: '',
+    draw(ctx, projected, p, t) {
+      const frameNum = Math.floor(t / 500); // recompute every ~500ms
+      const cacheKey = frameNum + ':' + projected.length + ':' + (p.lineThreshold || 60);
+
+      let edges;
+      if (this._cacheKey === cacheKey && this._edgeCache) {
+        edges = this._edgeCache;
+      } else {
+        edges = this._triangulate(projected, p.lineThreshold || 80);
+        this._edgeCache = edges;
+        this._cacheKey = cacheKey;
+      }
+
+      // Draw dots
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = p.glowBlur;
+      for (const pt of projected) {
+        ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.alpha));
+        ctx.beginPath();
+        ctx.arc(pt.px, pt.py, pt.r * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Draw mesh edges
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 0.5;
+      for (let k = 0; k < edges.length; k += 2) {
+        const i = edges[k], j = edges[k + 1];
+        const a = projected[i], b = projected[j];
+        const lineAlpha = Math.min(a.alpha, b.alpha) * 0.3;
+        ctx.globalAlpha = lineAlpha;
+        ctx.beginPath();
+        ctx.moveTo(a.px, a.py);
+        ctx.lineTo(b.px, b.py);
+        ctx.stroke();
+      }
+    },
+
+    _triangulate(pts, maxDist) {
+      // Simple nearest-neighbor triangulation: connect each point to its 2 nearest neighbors within maxDist
+      const edges = [];
+      const maxPerPoint = 2;
+      const totalEdges = Math.min(pts.length * maxPerPoint, 600);
+      let count = 0;
+
+      for (let i = 0; i < pts.length && count < totalEdges; i++) {
+        const a = pts[i];
+        const dists = [];
+        for (let j = 0; j < pts.length; j++) {
+          if (j === i) continue;
+          const b = pts[j];
+          const dx = a.px - b.px, dy = a.py - b.py;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d <= maxDist) dists.push({ j, d });
+        }
+        dists.sort((a, b) => a.d - b.d);
+        for (let k = 0; k < Math.min(maxPerPoint, dists.length) && count < totalEdges; k++) {
+          edges.push(i, dists[k].j);
+          count++;
+        }
+      }
+      return edges;
+    }
+  },
+
+  glow: {
+    name: 'Glow Field',
+    _cache: null,
+    draw(ctx, projected, p) {
+      // Pre-render gradient canvases at different sizes
+      if (!this._cache) {
+        this._cache = {};
+        const sizes = [2, 4, 8, 16, 32];
+        for (const size of sizes) {
+          const c = document.createElement('canvas');
+          c.width = size * 2;
+          c.height = size * 2;
+          const t = c.getContext('2d');
+          const grad = t.createRadialGradient(size, size, 0, size, size, size);
+          grad.addColorStop(0, 'rgba(255,255,255,1)');
+          grad.addColorStop(0.1, 'rgba(255,255,255,0.8)');
+          grad.addColorStop(0.4, 'rgba(255,255,255,0.3)');
+          grad.addColorStop(1, 'rgba(255,255,255,0)');
+          t.fillStyle = grad;
+          t.fillRect(0, 0, size * 2, size * 2);
+          this._cache[size] = c;
+        }
+      }
+
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = 'lighter';
+
+      for (const pt of projected) {
+        const size = Math.round(pt.r * 2);
+        if (size < 1) continue;
+        const snap = size <= 4 ? 4 : size <= 8 ? 8 : size <= 16 ? 16 : 32;
+        const tex = this._cache[snap];
+        if (!tex) continue;
+        ctx.globalAlpha = Math.max(0.05, Math.min(0.6, pt.alpha));
+        ctx.drawImage(tex, pt.px - snap, pt.py - snap, snap * 2, snap * 2);
+      }
+
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
+  }
+};
+
 function frame(t) {
   try {
-    ctx.clearRect(0, 0, W, H);
+    const p = params;
+    // Clear or trail
+    if (p.trails) {
+      ctx.fillStyle = 'rgba(6,6,14,0.15)';
+      ctx.fillRect(0, 0, W, H);
+    } else {
+      ctx.clearRect(0, 0, W, H);
+    }
     if (!particles.length || !logoCanvas) {
       animId = requestAnimationFrame(frame);
       return;
     }
 
-    const p = params;
     const time = t * 0.00015;
     const yaw = Math.sin(time * p.yawSpeed) * p.yawAmp;
     const pitch = Math.sin(time * p.pitchSpeed * 0.7) * p.pitchAmp;
@@ -581,13 +807,9 @@ function frame(t) {
 
     projected.sort((a, b) => a.z - b.z);
 
-    ctx.fillStyle = p.color;
-    for (const pt of projected) {
-      ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.alpha));
-      ctx.beginPath();
-      ctx.arc(pt.px, pt.py, pt.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    // Dispatch to current render mode
+    const mode = RENDER_MODES[p.renderMode] || RENDER_MODES.dots;
+    mode.draw(ctx, projected, p, t);
 
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
@@ -662,7 +884,8 @@ const paramBindings = [
   { id: 'sizeMax', el: 'p-sizeMax', val: 'v-sizeMax', min: 1, max: 16, step: 0.5 },
   { id: 'glowBlur', el: 'p-glowBlur', val: 'v-glowBlur', min: 0, max: 20, step: 1 },
   { id: 'depthFade', el: 'p-depthFade', val: 'v-depthFade', min: 0, max: 1, step: 0.05 },
-  { id: 'scale', el: 'p-scale', val: 'v-scale', min: 0.1, max: 1.5, step: 0.05 }
+  { id: 'scale', el: 'p-scale', val: 'v-scale', min: 0.1, max: 1.5, step: 0.05 },
+  { id: 'lineThreshold', el: 'p-lineThreshold', val: 'v-lineThreshold', min: 20, max: 200, step: 2 }
 ];
 
 function initUI() {
@@ -697,6 +920,29 @@ function initUI() {
     colorInput.addEventListener('input', () => {
       params.color = colorInput.value;
       colorVal.textContent = colorInput.value;
+    });
+  }
+
+  // Render mode select
+  const modeSelect = document.getElementById('p-renderMode');
+  if (modeSelect) {
+    modeSelect.value = params.renderMode;
+    updateLineThresholdVisibility(params.renderMode);
+    modeSelect.addEventListener('change', () => {
+      params.renderMode = modeSelect.value;
+      updateLineThresholdVisibility(params.renderMode);
+    });
+  }
+
+  // Trails checkbox
+  const trailsCheck = document.getElementById('p-trails');
+  const trailsLabel = document.getElementById('v-trails');
+  if (trailsCheck) {
+    trailsCheck.checked = params.trails;
+    trailsLabel.textContent = params.trails ? 'On' : 'Off';
+    trailsCheck.addEventListener('change', () => {
+      params.trails = trailsCheck.checked;
+      trailsLabel.textContent = trailsCheck.checked ? 'On' : 'Off';
     });
   }
 
@@ -804,6 +1050,11 @@ function formatVal(val, step) {
   return Math.round(val).toString();
 }
 
+function updateLineThresholdVisibility(mode) {
+  const row = document.querySelector('.line-threshold-row');
+  if (row) row.style.display = (mode === 'lines' || mode === 'triangles') ? '' : 'none';
+}
+
 function updateUI() {
   for (const b of paramBindings) {
     const input = document.getElementById(b.el);
@@ -813,6 +1064,12 @@ function updateUI() {
   const colorInput = document.getElementById('p-color');
   const colorVal = document.getElementById('v-color');
   if (colorInput) { colorInput.value = params.color; colorVal.textContent = params.color; }
+  const modeSelect = document.getElementById('p-renderMode');
+  if (modeSelect) { modeSelect.value = params.renderMode; }
+  const trailsCheck = document.getElementById('p-trails');
+  const trailsLabel = document.getElementById('v-trails');
+  if (trailsCheck) { trailsCheck.checked = params.trails; trailsLabel.textContent = params.trails ? 'On' : 'Off'; }
+  updateLineThresholdVisibility(params.renderMode);
 }
 
 function handleSVGFile(file) {
@@ -936,6 +1193,122 @@ function rotateY(x, z, a) {
   return { x: x * c - z * s, z: x * s + z * c };
 }
 
+const RENDER_MODES = {
+  dots: {
+    draw(ctx, g, p) {
+      ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = p.glowBlur || 3;
+      for (const pt of g) {
+        ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.a));
+        ctx.beginPath(); ctx.arc(pt.px, pt.py, pt.r, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  },
+  lines: {
+    draw(ctx, g, p) {
+      const thr = p.lineThreshold || 60, cs = thr;
+      const grid = new Map();
+      for (let i = 0; i < g.length; i++) {
+        const k = Math.floor(g[i].px / cs) + ',' + Math.floor(g[i].py / cs);
+        if (!grid.has(k)) grid.set(k, []);
+        grid.get(k).push(i);
+      }
+      ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = p.glowBlur || 3;
+      for (const pt of g) {
+        ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.a));
+        ctx.beginPath(); ctx.arc(pt.px, pt.py, pt.r * 0.6, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.shadowBlur = 0; ctx.strokeStyle = p.color; ctx.lineWidth = 0.5;
+      let drawn = 0; const seen = new Set();
+      for (let i = 0; i < g.length && drawn < 200; i++) {
+        const a = g[i], cx = Math.floor(a.px / cs), cy = Math.floor(a.py / cs);
+        for (let dx = -1; dx <= 1 && drawn < 200; dx++) {
+          for (let dy = -1; dy <= 1 && drawn < 200; dy++) {
+            const nb = grid.get((cx + dx) + ',' + (cy + dy));
+            if (!nb) continue;
+            for (const j of nb) {
+              if (j <= i) continue;
+              const ek = i < j ? i + '-' + j : j + '-' + i;
+              if (seen.has(ek)) continue;
+              seen.add(ek);
+              const b = g[j];
+              const d = Math.sqrt((a.px - b.px) ** 2 + (a.py - b.py) ** 2);
+              if (d <= thr) {
+                ctx.globalAlpha = Math.min(a.a, b.a) * 0.4;
+                ctx.beginPath(); ctx.moveTo(a.px, a.py); ctx.lineTo(b.px, b.py); ctx.stroke();
+                drawn++;
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  triangles: {
+    _ec: null, _ck: '',
+    _tri(pts, md) {
+      const e = []; const max = Math.min(pts.length * 2, 600); let c = 0;
+      for (let i = 0; i < pts.length && c < max; i++) {
+        const d = [];
+        for (let j = 0; j < pts.length; j++) {
+          if (j === i) continue;
+          const dx = pts[i].px - pts[j].px, dy = pts[i].py - pts[j].py;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist <= md) d.push({ j, d: dist });
+        }
+        d.sort((a, b) => a.d - b.d);
+        for (let k = 0; k < Math.min(2, d.length) && c < max; k++) { e.push(i, d[k].j); c++; }
+      }
+      return e;
+    },
+    draw(ctx, g, p, t) {
+      const fn = Math.floor(t / 500), ck = fn + ':' + g.length + ':' + (p.lineThreshold || 60);
+      let edges;
+      if (this._ck === ck && this._ec) { edges = this._ec; }
+      else { edges = this._tri(g, p.lineThreshold || 80); this._ec = edges; this._ck = ck; }
+      ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = p.glowBlur || 3;
+      for (const pt of g) {
+        ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.a));
+        ctx.beginPath(); ctx.arc(pt.px, pt.py, pt.r * 0.5, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.shadowBlur = 0; ctx.strokeStyle = p.color; ctx.lineWidth = 0.5;
+      for (let k = 0; k < edges.length; k += 2) {
+        const a = g[edges[k]], b = g[edges[k + 1]];
+        ctx.globalAlpha = Math.min(a.a, b.a) * 0.3;
+        ctx.beginPath(); ctx.moveTo(a.px, a.py); ctx.lineTo(b.px, b.py); ctx.stroke();
+      }
+    }
+  },
+  glow: {
+    _cache: null,
+    draw(ctx, g, p) {
+      if (!this._cache) {
+        this._cache = {};
+        for (const s of [2, 4, 8, 16, 32]) {
+          const c = document.createElement('canvas');
+          c.width = s * 2; c.height = s * 2;
+          const t = c.getContext('2d');
+          const gr = t.createRadialGradient(s, s, 0, s, s, s);
+          gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.1, 'rgba(255,255,255,0.8)');
+          gr.addColorStop(0.4, 'rgba(255,255,255,0.3)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+          t.fillStyle = gr; t.fillRect(0, 0, s * 2, s * 2);
+          this._cache[s] = c;
+        }
+      }
+      ctx.shadowBlur = 0; ctx.globalCompositeOperation = 'lighter';
+      for (const pt of g) {
+        const s = Math.round(pt.r * 2);
+        if (s < 1) continue;
+        const snap = s <= 4 ? 4 : s <= 8 ? 8 : s <= 16 ? 16 : 32;
+        const tex = this._cache[snap];
+        if (!tex) continue;
+        ctx.globalAlpha = Math.max(0.05, Math.min(0.6, pt.a));
+        ctx.drawImage(tex, pt.px - snap, pt.py - snap, snap * 2, snap * 2);
+      }
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    }
+  }
+};
+
 async function init() {
   const p = PRESET.params;
   const svgStr = PRESET.svg;
@@ -1016,7 +1389,8 @@ function sampleParticles(p) {
 function loop() {
   const t = performance.now();
   const p = PRESET.params;
-  ctx.clearRect(0, 0, W, H);
+  if (p.trails) { ctx.fillStyle = 'rgba(6,6,14,0.15)'; ctx.fillRect(0, 0, W, H); }
+  else { ctx.clearRect(0, 0, W, H); }
   if (!particles.length || !logoCanvas) { animId = requestAnimationFrame(loop); return; }
   const time = t * 0.00015;
   const yaw = Math.sin(time * p.yawSpeed) * (p.yawAmp || 0.15);
@@ -1057,11 +1431,8 @@ function loop() {
     });
   }
   projected.sort((a, b) => a.z - b.z);
-  ctx.fillStyle = p.color;
-  for (const pt of projected) {
-    ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.a));
-    ctx.beginPath(); ctx.arc(pt.px, pt.py, pt.r, 0, Math.PI * 2); ctx.fill();
-  }
+  const mode = RENDER_MODES[p.renderMode || 'dots'] || RENDER_MODES.dots;
+  mode.draw(ctx, projected, p, t);
   ctx.globalAlpha = 1; ctx.shadowBlur = 0;
   animId = requestAnimationFrame(loop);
 }
