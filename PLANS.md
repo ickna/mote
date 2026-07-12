@@ -67,10 +67,10 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Smooth visual transitions when switching presets.
 
-- [ ] Approach A: Spring interpolation — find nearest old particle, carry velocity to new target
-- [ ] Approach B: Crossfade — old particles fade out, new particles fade in
-- [ ] `transitionDuration` param (500–3000ms)
-- [ ] `transitionState` object in render loop
+- [x] Approach A: Spring interpolation — find nearest old particle, carry velocity to new target
+- [x] Approach B: Crossfade — old particles fade out, new particles fade in
+- [x] `transitionDuration` param (500–3000ms)
+- [x] `transitionState` object in render loop
 
 ## Phase 2.7 — Timeline / Auto-Preset Cycling
 
