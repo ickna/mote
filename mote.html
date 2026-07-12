@@ -317,6 +317,10 @@ let W, H, DPR;
 let logoCanvas = null;
 let animId = null;
 let engineReady = false;
+let waveNodes = []; // extracted from SVG circles
+let yawAngle = 0, pitchAngle = 0;
+let yRotEnabled = true;
+const keys = {};
 
 // ── URL mode ──────────────────────────────────────────────────
 const urlParams = new URLSearchParams(window.location.search);
@@ -865,8 +869,22 @@ function frame(t) {
     }
 
     const time = t * 0.00015;
-    const yaw = Math.sin(time * p.yawSpeed) * p.yawAmp;
-    const pitch = Math.sin(time * p.pitchSpeed * 0.7) * p.pitchAmp;
+
+    // Keyboard-driven rotation with smooth interpolation
+    const ROT_SPEED = 0.025;
+    const targetYawSpeed = (keys['ArrowLeft'] ? -1 : keys['ArrowRight'] ? 1 : 0) * ROT_SPEED;
+    const targetPitchSpeed = (keys['ArrowUp'] ? -1 : keys['ArrowDown'] ? 1 : 0) * ROT_SPEED;
+    let yawSpd = 0, pitchSpd = 0;
+    yawSpd += (targetYawSpeed - yawSpd) * 0.15;
+    pitchSpd += (targetPitchSpeed - pitchSpd) * 0.15;
+    yawAngle += yawSpd;
+    pitchAngle += pitchSpd;
+
+    // Auto-yaw oscillation (togglable with /)
+    const autoYaw = yRotEnabled ? Math.sin(t * 0.0003) * p.yawAmp * 1.75 : 0;
+    const effectiveYaw = yawAngle + autoYaw;
+    const yaw = effectiveYaw;
+    const pitch = pitchAngle + Math.sin(time * p.pitchSpeed * 0.7) * p.pitchAmp * 0.5;
 
     // Logo bounds
     const logoAspect = logoCanvas.width / logoCanvas.height;
@@ -894,14 +912,22 @@ function frame(t) {
 
     // Compute & project
     const projected = [];
+    const lcx = logoCanvas.width / 2, lcy = logoCanvas.height / 2;
+    const waveOrigin = getWaveOrigin(t);
     for (const pt of particles) {
       const waveX = p.waveAmp * Math.sin(t * p.waveFreq + pt.phase + pt.ty * 0.01);
       const waveY = p.waveAmp * 0.6 * Math.cos(t * p.waveFreq * 1.2 + pt.phase * 0.7 + pt.tx * 0.008);
       const waveZ = p.waveAmp * 1.5 * Math.sin(t * p.waveFreq * 0.9 + pt.phase * 1.1 + pt.ty * 0.006);
 
+      // Wave modulation from origin
+      const wdx = pt.tx - waveOrigin.x, wdy = pt.ty - waveOrigin.y;
+      const waveMod = 0.6 + 0.4 * Math.max(0, Math.cos(Math.sqrt(wdx * wdx + wdy * wdy) * 0.02 - t * 0.002));
+
       const targetX = pt.tx + waveX;
       const targetY = pt.ty + waveY;
-      const targetZ = pt.tz + waveZ;
+      // Edge-distance depth: interior bulges, edges stay flat
+      const depthSign = Math.sin(t * 0.0003 + pt.tx * 0.01 + pt.ty * 0.01);
+      const targetZ = depthSign * Math.min(35, (pt.edgeDist || 0) * 0.8) + waveZ;
 
       const ry = rotateY(targetX, targetZ, yaw);
       const r3d = rotateX(targetY, ry.z, pitch);
@@ -924,7 +950,16 @@ function frame(t) {
       const screenSize = Math.max(pt.size * scale * 1.5, 0.3);
       const depthFade = p.depthFade ? Math.min(1, (zOffset + 100) / 300) : 1;
 
-      projected.push({ px: screenX, py: screenY, r: screenSize, z: zOffset, alpha: depthFade });
+      // Convergence fade-in: particles fade as they approach target
+      const convergeDist = Math.sqrt((pt.x - pt.tx) ** 2 + (pt.y - pt.ty) ** 2 + (pt.z - pt.tz) ** 2);
+      const convergeAlpha = Math.min(1, Math.max(0.02, 1 - convergeDist / 2000));
+
+      // Size pulse: particles breathe
+      const sizePulse = 1.4 + 0.4 * Math.sin(t * 0.002 + pt.phase);
+      const finalAlpha = Math.max(0.15, Math.min(1, depthFade * convergeAlpha * waveMod));
+      const finalSize = Math.max(screenSize * sizePulse, 0.3);
+
+      projected.push({ px: screenX, py: screenY, r: finalSize, z: zOffset, alpha: finalAlpha, phase: pt.phase });
     }
 
     projected.sort((a, b) => a.z - b.z);
@@ -952,6 +987,8 @@ async function loadSVG(svgString, keepParticles) {
   if (!result) { console.error('SVG render failed'); return; }
   logoCanvas = result.canvas;
   particles = MoteSVG.sample(result, params.spacing, params);
+  // Compute edge distance for each particle
+  computeEdgeDist(svgString);
   engineReady = true;
 
   // Update SVG info
@@ -959,9 +996,84 @@ async function loadSVG(svgString, keepParticles) {
   if (infoEl) infoEl.textContent = MoteSVG.getInfo(svgString) + ` · ${particles.length} particles`;
 }
 
+function computeEdgeDist(svgString) {
+  // Parse SVG paths and find edge particles
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgString, 'image/svg+xml');
+  const svg = doc.querySelector('svg');
+  let svgW = 400, svgH = 300;
+  const vb = svg ? svg.getAttribute('viewBox') : null;
+  if (vb) { const pts = vb.split(/[,\s]+/).map(Number); svgW = pts[2] - pts[0]; svgH = pts[3] - pts[1]; }
+  else { svgW = parseInt(svg.getAttribute('width')) || 400; svgH = parseInt(svg.getAttribute('height')) || 300; }
+
+  // Collect all paths and circles for isPointInPath
+  const paths = Array.from(doc.querySelectorAll('path')).map(p => p.getAttribute('d')).filter(Boolean).map(d => new Path2D(d));
+  const circles = Array.from(doc.querySelectorAll('circle')).map(c => ({
+    cx: parseFloat(c.getAttribute('cx')) || 0,
+    cy: parseFloat(c.getAttribute('cy')) || 0,
+    r: parseFloat(c.getAttribute('r')) || 0
+  }));
+
+  const inside = (x, y) => {
+    for (const c of circles) { const dx = x - c.cx, dy = y - c.cy; if (dx * dx + dy * dy <= c.r * c.r) return true; }
+    for (const p of paths) { if (ctx.isPointInPath(p, x, y, 'evenodd')) return true; }
+    return false;
+  };
+
+  // Use a temporary offscreen canvas for isPointInPath
+  const tmpCanvas = document.createElement('canvas');
+  const tmpCtx = tmpCanvas.getContext('2d');
+  const ctx = tmpCtx; // for the inside() closure
+
+  // Sample edge grid
+  const edgeSpacing = 7;
+  const edgeList = [];
+  const ec = Math.ceil(svgW / edgeSpacing);
+  const er = Math.ceil(svgH / edgeSpacing);
+  for (let gy = 1; gy < er - 1; gy++) {
+    for (let gx = 1; gx < ec - 1; gx++) {
+      const px = gx * edgeSpacing, py = gy * edgeSpacing;
+      if (inside(px, py)) {
+        if (!inside(px - edgeSpacing, py) || !inside(px + edgeSpacing, py) ||
+            !inside(px, py - edgeSpacing) || !inside(px, py + edgeSpacing)) {
+          edgeList.push({ tx: px, ty: py });
+        }
+      }
+    }
+  }
+
+  // Compute edge distance for each particle
+  const logoW = logoCanvas.width, logoH = logoCanvas.height;
+  const sx = logoW / svgW, sy = logoH / svgH;
+  for (const pt of particles) {
+    let minDist = Infinity;
+    const px = pt.tx / sx, py = pt.ty / sy; // convert to SVG space
+    for (const ep of edgeList) {
+      const dx = px - ep.tx, dy = py - ep.ty;
+      const d = dx * dx + dy * dy;
+      if (d < minDist) minDist = d;
+    }
+    pt.edgeDist = Math.sqrt(minDist);
+  }
+
+  // Extract wave nodes from SVG circles
+  waveNodes = circles.map(c => ({ x: c.cx, y: c.cy }));
+}
+
+function getWaveOrigin(t) {
+  if (!waveNodes.length) return { x: 0, y: 0 };
+  const cycle = (t * 0.00008) % waveNodes.length;
+  const idx = Math.floor(cycle);
+  const frac = cycle - idx;
+  const a = waveNodes[idx];
+  const b = waveNodes[(idx + 1) % waveNodes.length];
+  return { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac };
+}
+
 function resetParticles() {
   if (!logoCanvas) return;
   particles = MoteSVG.sample({ canvas: logoCanvas, width: logoCanvas.width, height: logoCanvas.height }, params.spacing, params);
+  computeEdgeDist(currentSVG);
 }
 
 function applyParams(newParams) {
@@ -1741,6 +1853,10 @@ async function boot() {
     catch (e) { console.error('Mote loop error:', e); }
   }
   loop();
+
+  // Keyboard controls
+  document.addEventListener('keydown', e => { keys[e.key] = true; if (e.key === '/') yRotEnabled = !yRotEnabled; });
+  document.addEventListener('keyup', e => { keys[e.key] = false; });
 
   // Hide loading
   setTimeout(() => document.getElementById('loading').classList.add('hidden'), 500);

@@ -44,7 +44,26 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 - [x] Palette presets (array of hex colors)
 - [x] Per-particle gradient rendering (radial gradient tinted to particle color)
 
-## Phase 2.4 — Preset Transitions
+## Phase 2.4 — Engine Polish (from landing page audit)
+
+**Goal:** Shape-aware depth, breathing particles, convergence fade, wave cycling, keyboard controls.
+
+- [ ] Edge-distance depth: compute edge particles from SVG, store `edgeDist` per particle, use animated sine wave for tz (interior bulges, edges flat)
+- [ ] Convergence fade-in: `convergeAlpha` based on distance from target position — smooth initial settling
+- [ ] Size pulse: `sizePulse = 1.4 + 0.4 * sin(t * freq + phase)` — particles breathe
+- [ ] Wave origin cycling: cycle through logo geometry nodes for wave origin
+- [ ] Keyboard controls: arrow keys for manual rotation, `/` to toggle auto-yaw
+
+## Phase 2.5 — Edge Shimmer
+
+**Goal:** Edge particles with sparkle/shine along the logo outline.
+
+- [ ] Edge particle sampling: detect outline pixels from SVG, store as separate layer
+- [ ] Sparkle system: random flare probability, bright white dot + glow
+- [ ] Edge-to-main connection lines (optional layer)
+- [ ] Toggle in editor UI, serialized in presets
+
+## Phase 2.6 — Preset Transitions
 
 **Goal:** Smooth visual transitions when switching presets.
 
@@ -53,7 +72,7 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 - [ ] `transitionDuration` param (500–3000ms)
 - [ ] `transitionState` object in render loop
 
-## Phase 2.5 — Timeline / Auto-Preset Cycling
+## Phase 2.7 — Timeline / Auto-Preset Cycling
 
 **Goal:** Automated preset cycling for CasparCG / kiosk.
 
@@ -62,7 +81,7 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 - [ ] Play/pause/stop controls
 - [ ] Auto-cycling in playback mode via `?mode=play&preset=playlist.json`
 
-## Phase 2.6 — CasparCG & Kiosk Optimization
+## Phase 2.8 — CasparCG & Kiosk Optimization
 
 **Goal:** Production-ready for live event use.
 
@@ -72,7 +91,7 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 - [ ] Memory leak audit — cancel rAF on page hide
 - [ ] Verify CEF `file://` fetch behavior
 
-## Phase 2.7 — CLI Tool
+## Phase 2.9 — CLI Tool
 
 **Goal:** Generate presets from SVG files server-side.
 
