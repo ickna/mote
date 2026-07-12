@@ -184,6 +184,12 @@ canvas{display:block;width:100%;height:100%}
                     <span style="font-size:11px;opacity:.5" id="v-trails">Off</span>
                   </label>
                 </div>
+                <div class="param-row"><label>Edge Shimmer</label>
+                  <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="checkbox" id="p-edgeShimmer" style="accent-color:var(--accent)">
+                    <span style="font-size:11px;opacity:.5" id="v-edgeShimmer">Off</span>
+                  </label>
+                </div>
               </div>
 
               <div class="btn-row">
@@ -268,6 +274,7 @@ const DEFAULT_PARAMS = {
   scale: 0.80,
   renderMode: 'dots',
   trails: false,
+  edgeShimmer: false,
   lineThreshold: 60
 };
 
@@ -321,6 +328,7 @@ let waveNodes = []; // extracted from SVG circles
 let yawAngle = 0, pitchAngle = 0;
 let yRotEnabled = true;
 const keys = {};
+let edgeParticles = []; // edge particles for shimmer effect
 
 // ── URL mode ──────────────────────────────────────────────────
 const urlParams = new URLSearchParams(window.location.search);
@@ -968,6 +976,51 @@ function frame(t) {
     const mode = RENDER_MODES[p.renderMode] || RENDER_MODES.dots;
     mode.draw(ctx, projected, p, t);
 
+    // Edge shimmer: sparkle along the logo outline
+    if (p.edgeShimmer && edgeParticles.length) {
+      ctx.shadowBlur = 0;
+      // Update sparkles
+      for (const ep of edgeParticles) {
+        if (ep.sparkle <= 0) {
+          if (Math.random() < 0.24) ep.sparkle = 0.5 + Math.random() * 0.5;
+        } else {
+          ep.sparkle -= 0.04;
+          if (ep.sparkle < 0) ep.sparkle = 0;
+        }
+      }
+      // Project and draw edge particles
+      const ss = Math.min(W, H) / 700;
+      for (const ep of edgeParticles) {
+        const ry = rotateY(ep.tx - lcx, ep.tz, yaw);
+        const r3d = rotateX(ep.ty - lcy, ry.z, pitch);
+        const zOff = r3d.z + 200;
+        const ps = FOCAL / (FOCAL + zOff);
+        const sx = r3d.x * ps * sc + cx;
+        const sy = r3d.y * ps * sc + cy;
+        if (sx < -50 || sx > W + 50 || sy < -50 || sy > H + 50) continue;
+        // Faint white dot always visible
+        ctx.globalAlpha = 0.23;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(sx, sy, 3 * ss, 0, Math.PI * 2);
+        ctx.fill();
+        // Sparkle: bright core + glow
+        if (ep.sparkle > 0.02) {
+          const size = ep.sparkle * 2.8 * ss;
+          ctx.globalAlpha = ep.sparkle * 0.35;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(sx, sy, size * 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = ep.sparkle * 0.9;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(sx, sy, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
   } catch (e) {
@@ -1042,9 +1095,12 @@ function computeEdgeDist(svgString) {
     }
   }
 
-  // Compute edge distance for each particle
+  // Store edge particles globally (for shimmer) and compute edge distance for each particle
   const logoW = logoCanvas.width, logoH = logoCanvas.height;
   const sx = logoW / svgW, sy = logoH / svgH;
+  edgeParticles = edgeList.map(ep => ({
+    tx: ep.tx, ty: ep.ty, tz: 0, sparkle: 0, phase: Math.random() * Math.PI * 2
+  }));
   for (const pt of particles) {
     let minDist = Infinity;
     const px = pt.tx / sx, py = pt.ty / sy; // convert to SVG space
@@ -1177,6 +1233,18 @@ function initUI() {
     trailsCheck.addEventListener('change', () => {
       params.trails = trailsCheck.checked;
       trailsLabel.textContent = trailsCheck.checked ? 'On' : 'Off';
+    });
+  }
+
+  // Edge shimmer checkbox
+  const edgeShimmerCheck = document.getElementById('p-edgeShimmer');
+  const edgeShimmerLabel = document.getElementById('v-edgeShimmer');
+  if (edgeShimmerCheck) {
+    edgeShimmerCheck.checked = params.edgeShimmer;
+    edgeShimmerLabel.textContent = params.edgeShimmer ? 'On' : 'Off';
+    edgeShimmerCheck.addEventListener('change', () => {
+      params.edgeShimmer = edgeShimmerCheck.checked;
+      edgeShimmerLabel.textContent = edgeShimmerCheck.checked ? 'On' : 'Off';
     });
   }
 
@@ -1349,6 +1417,9 @@ function updateUI() {
   const trailsCheck = document.getElementById('p-trails');
   const trailsLabel = document.getElementById('v-trails');
   if (trailsCheck) { trailsCheck.checked = params.trails; trailsLabel.textContent = params.trails ? 'On' : 'Off'; }
+  const edgeShimmerCheck = document.getElementById('p-edgeShimmer');
+  const edgeShimmerLabel = document.getElementById('v-edgeShimmer');
+  if (edgeShimmerCheck) { edgeShimmerCheck.checked = params.edgeShimmer; edgeShimmerLabel.textContent = params.edgeShimmer ? 'On' : 'Off'; }
   const colorModeSelect = document.getElementById('p-colorMode');
   if (colorModeSelect) { colorModeSelect.value = params.colorMode; }
   const color2Input = document.getElementById('p-colorSecondary');
