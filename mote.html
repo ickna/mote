@@ -312,12 +312,9 @@ const MoteSVG = {
   },
 
   renderPathsDirect(svgString, sampleSize, svgW, svgH) {
-    // Fallback using Path2D for simpler SVGs
+    // Fallback rendering — handles all SVG element types via Path2D/Canvas2D
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgString, 'image/svg+xml');
-    const paths = doc.querySelectorAll('path');
-    const circles = doc.querySelectorAll('circle');
-
     const aspect = svgW / svgH;
     const cw = sampleSize;
     const ch = Math.round(sampleSize / aspect);
@@ -328,47 +325,100 @@ const MoteSVG = {
     const s = cw / svgW;
 
     tctx.fillStyle = '#fff';
+    tctx.strokeStyle = '#fff';
+    tctx.lineWidth = 2;
 
-    // Check for transforms
-    const svg = doc.querySelector('svg');
-    const transforms = svg ? svg.querySelectorAll('g[transform]') : [];
+    // Collect all drawable elements in document order (preserves z-order)
+    const elements = doc.querySelectorAll('path, circle, rect, ellipse, polygon, polyline, line');
 
-    for (const path of paths) {
-      const d = path.getAttribute('d');
-      if (!d) continue;
+    for (const el of elements) {
       tctx.save();
-      // Apply parent g transform if any
-      let parent = path.parentElement;
+      // Scale to SVG coordinate space first, then apply parent transforms
+      tctx.scale(s, s);
+      let parent = el.parentElement;
       while (parent && parent.tagName === 'g') {
         const t = parent.getAttribute('transform');
         if (t) this.applyTransform(tctx, t);
         parent = parent.parentElement;
       }
-      tctx.scale(s, s);
-      const p = new Path2D(d);
-      tctx.fill(p);
-      tctx.restore();
-    }
-
-    for (const circ of circles) {
-      const cx = parseFloat(circ.getAttribute('cx')) || 0;
-      const cy = parseFloat(circ.getAttribute('cy')) || 0;
-      const r = parseFloat(circ.getAttribute('r')) || 0;
-      tctx.save();
-      let parent = circ.parentElement;
-      while (parent && parent.tagName === 'g') {
-        const t = parent.getAttribute('transform');
-        if (t) this.applyTransform(tctx, t);
-        parent = parent.parentElement;
-      }
-      tctx.scale(s, s);
-      tctx.beginPath();
-      tctx.arc(cx, cy, r, 0, Math.PI * 2);
-      tctx.fill();
+      this.drawElement(tctx, el);
       tctx.restore();
     }
 
     return { canvas: c, width: cw, height: ch };
+  },
+
+  drawElement(ctx, el) {
+    const tag = el.tagName.toLowerCase();
+    switch (tag) {
+      case 'path': {
+        const d = el.getAttribute('d');
+        if (d) ctx.fill(new Path2D(d));
+        break;
+      }
+      case 'circle': {
+        const cx = parseFloat(el.getAttribute('cx')) || 0;
+        const cy = parseFloat(el.getAttribute('cy')) || 0;
+        const r = parseFloat(el.getAttribute('r')) || 0;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      case 'rect': {
+        const x = parseFloat(el.getAttribute('x')) || 0;
+        const y = parseFloat(el.getAttribute('y')) || 0;
+        const w = parseFloat(el.getAttribute('width'));
+        const h = parseFloat(el.getAttribute('height'));
+        if (!w || !h) break;
+        const rx = parseFloat(el.getAttribute('rx')) || 0;
+        const ry = parseFloat(el.getAttribute('ry')) || rx;
+        ctx.beginPath();
+        if (rx || ry) {
+          ctx.roundRect(x, y, w, h, Math.min(rx, w / 2), Math.min(ry, h / 2));
+        } else {
+          ctx.rect(x, y, w, h);
+        }
+        ctx.fill();
+        break;
+      }
+      case 'ellipse': {
+        const cx = parseFloat(el.getAttribute('cx')) || 0;
+        const cy = parseFloat(el.getAttribute('cy')) || 0;
+        const rx = parseFloat(el.getAttribute('rx')) || 0;
+        const ry = parseFloat(el.getAttribute('ry')) || 0;
+        if (!rx || !ry) break;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      case 'polygon':
+      case 'polyline': {
+        const pts = el.getAttribute('points');
+        if (!pts) break;
+        const coords = pts.trim().split(/[,\s]+/).map(Number);
+        ctx.beginPath();
+        for (let i = 0; i < coords.length - 1; i += 2) {
+          if (i === 0) ctx.moveTo(coords[i], coords[i + 1]);
+          else ctx.lineTo(coords[i], coords[i + 1]);
+        }
+        if (tag === 'polygon') ctx.closePath();
+        ctx.fill();
+        break;
+      }
+      case 'line': {
+        const x1 = parseFloat(el.getAttribute('x1')) || 0;
+        const y1 = parseFloat(el.getAttribute('y1')) || 0;
+        const x2 = parseFloat(el.getAttribute('x2')) || 0;
+        const y2 = parseFloat(el.getAttribute('y2')) || 0;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        break;
+      }
+    }
   },
 
   applyTransform(ctx, transformStr) {
@@ -382,14 +432,18 @@ const MoteSVG = {
     }
   },
 
-  sample(canvasData, spacing) {
+  sample(canvasData, spacing, opts = {}) {
     const { canvas: src } = canvasData;
     const tw = src.width;
     const th = src.height;
     const tctx = src.getContext('2d');
     const cols = Math.ceil(tw / spacing);
     const rows = Math.ceil(th / spacing);
-    const cx = tw / 2, cy = th / 2;
+    const zDisp = opts.zDispersion || 60;
+    const sizeMin = opts.sizeMin || 1.5;
+    const sizeMax = opts.sizeMax || 7.5;
+    const scatter = 300;
+    const zSpread = 100;
     const list = [];
 
     for (let gy = 0; gy < rows; gy++) {
@@ -400,15 +454,15 @@ const MoteSVG = {
         if (pixel[3] > 30) {
           const nx = (px / tw) * 2 - 1;
           const ny = (py / th) * 2 - 1;
-          const tz = 60 * Math.sin(nx * Math.PI * 0.8) * Math.cos(ny * Math.PI * 0.6)
-                   + 30 * Math.sin(px * 0.03) * Math.cos(py * 0.04);
+          const tz = zDisp * Math.sin(nx * Math.PI * 0.8) * Math.cos(ny * Math.PI * 0.6)
+                   + (zDisp / 2) * Math.sin(px * 0.03) * Math.cos(py * 0.04);
           list.push({
             tx: px, ty: py, tz: tz,
-            x: px + (Math.random() - 0.5) * 300,
-            y: py + (Math.random() - 0.5) * 300,
-            z: tz + (Math.random() - 0.5) * 100,
+            x: px + (Math.random() - 0.5) * scatter,
+            y: py + (Math.random() - 0.5) * scatter,
+            z: tz + (Math.random() - 0.5) * zSpread,
             vx: 0, vy: 0, vz: 0,
-            size: 1.5 + Math.random() * 6,
+            size: sizeMin + Math.random() * (sizeMax - sizeMin),
             phase: Math.random() * Math.PI * 2
           });
         }
@@ -454,88 +508,92 @@ function rotateY(x, z, angle) {
 }
 
 function frame(t) {
-  ctx.clearRect(0, 0, W, H);
-  if (!particles.length || !logoCanvas) {
-    animId = requestAnimationFrame(frame);
-    return;
+  try {
+    ctx.clearRect(0, 0, W, H);
+    if (!particles.length || !logoCanvas) {
+      animId = requestAnimationFrame(frame);
+      return;
+    }
+
+    const p = params;
+    const time = t * 0.00015;
+    const yaw = Math.sin(time * p.yawSpeed) * p.yawAmp;
+    const pitch = Math.sin(time * p.pitchSpeed * 0.7) * p.pitchAmp;
+
+    // Logo bounds
+    const logoAspect = logoCanvas.width / logoCanvas.height;
+    const sc = p.scale * Math.min(W, H / logoAspect);
+    let lw, lh, lx, ly;
+    if (W / H > logoAspect) {
+      lh = sc;
+      lw = sc * logoAspect;
+      lx = (W - lw) / 2;
+      ly = (H - lh) / 2;
+    } else {
+      lw = sc;
+      lh = sc / logoAspect;
+      lx = (W - lw) / 2;
+      ly = (H - lh) / 2;
+    }
+
+    const sx = lw / logoCanvas.width;
+    const sy = lh / logoCanvas.height;
+    const cx = lx + lw / 2;
+    const cy = ly + lh / 2;
+
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = p.glowBlur;
+
+    // Compute & project
+    const projected = [];
+    for (const pt of particles) {
+      const waveX = p.waveAmp * Math.sin(t * p.waveFreq + pt.phase + pt.ty * 0.01);
+      const waveY = p.waveAmp * 0.6 * Math.cos(t * p.waveFreq * 1.2 + pt.phase * 0.7 + pt.tx * 0.008);
+      const waveZ = p.waveAmp * 1.5 * Math.sin(t * p.waveFreq * 0.9 + pt.phase * 1.1 + pt.ty * 0.006);
+
+      const targetX = pt.tx + waveX;
+      const targetY = pt.ty + waveY;
+      const targetZ = pt.tz + waveZ;
+
+      const ry = rotateY(targetX, targetZ, yaw);
+      const r3d = rotateX(targetY, ry.z, pitch);
+      const rtx = ry.x;
+      const rty = r3d.y;
+      const rtz = r3d.z;
+
+      pt.vx = (pt.vx + (rtx - pt.x) * p.spring) * p.damping;
+      pt.vy = (pt.vy + (rty - pt.y) * p.spring) * p.damping;
+      pt.vz = (pt.vz + (rtz - pt.z) * p.spring) * p.damping;
+
+      pt.x += pt.vx;
+      pt.y += pt.vy;
+      pt.z += pt.vz;
+
+      const zOffset = pt.z + 200;
+      const scale = FOCAL / (FOCAL + zOffset);
+      const screenX = pt.x * scale + cx - lw / 2 * scale;
+      const screenY = pt.y * scale + cy - lh / 2 * scale;
+      const screenSize = Math.max(pt.size * scale * 1.5, 0.3);
+      const depthFade = p.depthFade ? Math.min(1, (zOffset + 100) / 300) : 1;
+
+      projected.push({ px: screenX, py: screenY, r: screenSize, z: zOffset, alpha: depthFade });
+    }
+
+    projected.sort((a, b) => a.z - b.z);
+
+    ctx.fillStyle = p.color;
+    for (const pt of projected) {
+      ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.alpha));
+      ctx.beginPath();
+      ctx.arc(pt.px, pt.py, pt.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+  } catch (e) {
+    console.error('Mote frame error:', e);
   }
-
-  const p = params;
-  const time = t * 0.00015;
-  const yaw = Math.sin(time * p.yawSpeed) * p.yawAmp;
-  const pitch = Math.sin(time * p.pitchSpeed * 0.7) * p.pitchAmp;
-
-  // Logo bounds
-  const logoAspect = logoCanvas.width / logoCanvas.height;
-  const sc = p.scale * Math.min(W, H / logoAspect);
-  let lw, lh, lx, ly;
-  if (W / H > logoAspect) {
-    lh = sc;
-    lw = sc * logoAspect;
-    lx = (W - lw) / 2;
-    ly = (H - lh) / 2;
-  } else {
-    lw = sc;
-    lh = sc / logoAspect;
-    lx = (W - lw) / 2;
-    ly = (H - lh) / 2;
-  }
-
-  const sx = lw / logoCanvas.width;
-  const sy = lh / logoCanvas.height;
-  const cx = lx + lw / 2;
-  const cy = ly + lh / 2;
-
-  ctx.shadowColor = p.color;
-  ctx.shadowBlur = p.glowBlur;
-
-  // Compute & project
-  const projected = [];
-  for (const pt of particles) {
-    const waveX = p.waveAmp * Math.sin(t * p.waveFreq + pt.phase + pt.ty * 0.01);
-    const waveY = p.waveAmp * 0.6 * Math.cos(t * p.waveFreq * 1.2 + pt.phase * 0.7 + pt.tx * 0.008);
-    const waveZ = p.waveAmp * 1.5 * Math.sin(t * p.waveFreq * 0.9 + pt.phase * 1.1 + pt.ty * 0.006);
-
-    const targetX = pt.tx + waveX;
-    const targetY = pt.ty + waveY;
-    const targetZ = pt.tz + waveZ;
-
-    const ry = rotateY(targetX, targetZ, yaw);
-    const r3d = rotateX(targetY, ry.z, pitch);
-    const rtx = ry.x;
-    const rty = r3d.y;
-    const rtz = r3d.z;
-
-    pt.vx = (pt.vx + (rtx - pt.x) * p.spring) * p.damping;
-    pt.vy = (pt.vy + (rty - pt.y) * p.spring) * p.damping;
-    pt.vz = (pt.vz + (rtz - pt.z) * p.spring) * p.damping;
-
-    pt.x += pt.vx;
-    pt.y += pt.vy;
-    pt.z += pt.vz;
-
-    const zOffset = pt.z + 200;
-    const scale = FOCAL / (FOCAL + zOffset);
-    const screenX = pt.x * scale + cx - lw / 2 * scale;
-    const screenY = pt.y * scale + cy - lh / 2 * scale;
-    const screenSize = Math.max(pt.size * scale * 1.5, 0.3);
-    const depthFade = p.depthFade ? Math.min(1, (zOffset + 100) / 300) : 1;
-
-    projected.push({ px: screenX, py: screenY, r: screenSize, z: zOffset, alpha: depthFade });
-  }
-
-  projected.sort((a, b) => a.z - b.z);
-
-  ctx.fillStyle = p.color;
-  for (const pt of projected) {
-    ctx.globalAlpha = Math.max(0.15, Math.min(1, pt.alpha));
-    ctx.beginPath();
-    ctx.arc(pt.px, pt.py, pt.r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.globalAlpha = 1;
-  ctx.shadowBlur = 0;
   animId = requestAnimationFrame(frame);
 }
 
@@ -549,7 +607,7 @@ async function loadSVG(svgString, keepParticles) {
   const result = await MoteSVG.renderToCanvas(svgString, sampleSize);
   if (!result) { console.error('SVG render failed'); return; }
   logoCanvas = result.canvas;
-  particles = MoteSVG.sample(result, params.spacing);
+  particles = MoteSVG.sample(result, params.spacing, params);
   engineReady = true;
 
   // Update SVG info
@@ -559,7 +617,7 @@ async function loadSVG(svgString, keepParticles) {
 
 function resetParticles() {
   if (!logoCanvas) return;
-  particles = MoteSVG.sample({ canvas: logoCanvas, width: logoCanvas.width, height: logoCanvas.height }, params.spacing);
+  particles = MoteSVG.sample({ canvas: logoCanvas, width: logoCanvas.width, height: logoCanvas.height }, params.spacing, params);
 }
 
 function applyParams(newParams) {
@@ -1045,10 +1103,12 @@ async function boot() {
     loadSVG(ICKNA_SVG);
   }
 
-  // Start loop
-  function loop() { frame(performance.now()); }
+  // Start self-healing render loop
+  function loop() {
+    try { frame(performance.now()); }
+    catch (e) { console.error('Mote loop error:', e); }
+  }
   loop();
-  setInterval(() => { if (!animId) { animId = requestAnimationFrame(function tick() { frame(performance.now()); }); } }, 100);
 
   // Hide loading
   setTimeout(() => document.getElementById('loading').classList.add('hidden'), 500);
