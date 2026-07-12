@@ -39,10 +39,10 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Beyond single-color particles.
 
-- [ ] Dual-color mode (primary + secondary pickers)
-- [ ] Color interpolation: z-depth, position, or phase-based
-- [ ] Palette presets (array of hex colors)
-- [ ] Per-particle gradient rendering (radial gradient tinted to particle color)
+- [x] Dual-color mode (primary + secondary pickers)
+- [x] Color interpolation: z-depth, position, or phase-based
+- [x] Palette presets (array of hex colors)
+- [x] Per-particle gradient rendering (radial gradient tinted to particle color)
 
 ## Phase 2.4 — Preset Transitions
 
