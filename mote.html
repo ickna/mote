@@ -383,6 +383,9 @@ let isPlaylistPlaying = false;
 const urlParams = new URLSearchParams(window.location.search);
 const isPlayMode = urlParams.get('mode') === 'play';
 const presetParam = urlParams.get('preset') || '';
+const fpsLimit = parseInt(urlParams.get('fps')) || 0;
+const hideOverlay = urlParams.has('hideOverlay');
+let lastFrameTime = 0;
 
 // ── Canvas resize ─────────────────────────────────────────────
 function resize() {
@@ -2302,11 +2305,38 @@ async function boot() {
   }
 
   // Start self-healing render loop
-  function loop() {
+  function loop(now) {
+    // FPS throttle
+    if (fpsLimit > 0) {
+      const minInterval = 1000 / fpsLimit;
+      if (now - lastFrameTime < minInterval) { animId = requestAnimationFrame(loop); return; }
+      lastFrameTime = now;
+    }
     try { frame(performance.now()); }
     catch (e) { console.error('Mote loop error:', e); }
   }
-  loop();
+  loop(0);
+
+  // Hide player overlay when requested
+  if (hideOverlay) {
+    const overlay = document.getElementById('player-overlay');
+    if (overlay) overlay.style.display = 'none';
+  }
+
+  // PWA standalone detection
+  if (window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) {
+    document.body.classList.add('pwa-mode');
+  }
+
+  // Cancel animation on page hide (memory/performance)
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && animId) {
+      cancelAnimationFrame(animId);
+      animId = null;
+    } else if (!document.hidden && !animId) {
+      loop(performance.now());
+    }
+  });
 
   // Init starfield
   initStars();
