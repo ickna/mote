@@ -104,10 +104,10 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Lines from edge particles to nearby main particles.
 
-- [ ] Screen-space distance threshold (180px)
-- [ ] Up to 6 nearest main particles per edge particle
-- [ ] Alpha fades with distance
-- [ ] Toggle in editor UI, serialized in presets
+- [x] Screen-space distance threshold (180px)
+- [x] Up to 6 nearest main particles per edge particle
+- [x] Alpha fades with distance
+- [x] Toggle in editor UI, serialized in presets
 
 ## Phase 2.11 — Timeline / Auto-Preset Cycling
 
