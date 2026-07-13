@@ -122,11 +122,11 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Production-ready for live event use.
 
-- [ ] Throttle via `?fps=30` parameter
-- [ ] `?hideOverlay` — suppress player text
-- [ ] PWA/standalone detection
-- [ ] Memory leak audit — cancel rAF on page hide
-- [ ] Verify CEF `file://` fetch behavior
+- [x] Throttle via `?fps=30` parameter
+- [x] `?hideOverlay` — suppress player text
+- [x] PWA/standalone detection
+- [x] Memory leak audit — cancel rAF on page hide
+- [x] Verify CEF `file://` fetch behavior
 
 ## Phase 2.13 — CLI Tool
 
