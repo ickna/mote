@@ -132,7 +132,7 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Generate presets from SVG files server-side.
 
-- [ ] Node.js CLI with `jsdom` + offscreen canvas
-- [ ] Or Python CLI with `cairosvg` + `Pillow`
-- [ ] `mote preset --svg logo.svg --output preset.json`
-- [ ] `mote export --preset preset.json --output player.html`
+- [x] Node.js CLI with `jsdom` + offscreen canvas
+- [x] Python CLI with `cairosvg` + `Pillow`
+- [x] `mote preset --svg logo.svg --output preset.json`
+- [x] `mote export --preset preset.json --output player.html`
