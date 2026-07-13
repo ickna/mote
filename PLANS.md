@@ -113,10 +113,10 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Automated preset cycling for CasparCG / kiosk.
 
-- [ ] "Timeline" tab in editor panel
-- [ ] Playlist format: `[{name, duration, transition}]`
-- [ ] Play/pause/stop controls
-- [ ] Auto-cycling in playback mode via `?mode=play&preset=playlist.json`
+- [x] "Timeline" tab in editor panel
+- [x] Playlist format: `[{name, duration, transition}]`
+- [x] Play/pause/stop controls
+- [x] Auto-cycling in playback mode via timer
 
 ## Phase 2.12 — CasparCG & Kiosk Optimization
 
