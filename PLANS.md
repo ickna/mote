@@ -67,12 +67,49 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Smooth visual transitions when switching presets.
 
-- [x] Approach A: Spring interpolation — find nearest old particle, carry velocity to new target
-- [x] Approach B: Crossfade — old particles fade out, new particles fade in
+- [x] Crossfade: old particles fade out, new particles fade in
 - [x] `transitionDuration` param (500–3000ms)
 - [x] `transitionState` object in render loop
 
-## Phase 2.7 — Timeline / Auto-Preset Cycling
+## Phase 2.7 — Drag Rotation + Starfield
+
+**Goal:** Mouse/touch drag rotation, parallax starfield background.
+
+- [ ] Drag rotation: click-drag to rotate yaw/pitch, tap to toggle auto-rotation
+- [ ] Starfield: two-layer parallax stars that respond to rotation angle
+- [ ] `starfield` toggle in editor UI, serialized in presets
+
+## Phase 2.8 — Fire/Ice Thermal System
+
+**Goal:** Cellular automata flame propagation with temperature-based rendering.
+
+- [ ] `flame` param on each particle (positive = fire, negative = ice)
+- [ ] Edge particle propagation: fire spreads to neighbors, ice cools them
+- [ ] Main particle propagation: random spread to nearby particles
+- [ ] Temperature-based rendering: fire = red→orange→yellow→white, ice = blue→white
+- [ ] Halo size/alpha varies with temperature
+- [ ] `=` key spawns ice, `\` key spawns fire at random edge particle
+- [ ] Toggle in editor UI, serialized in presets
+
+## Phase 2.9 — Nebula Background + Glow Texture
+
+**Goal:** Background gas cloud and per-particle glow texture.
+
+- [ ] Simplex noise class for procedural texture generation
+- [ ] Nebula: blurred logo + noise masked to shape, drawn as background
+- [ ] Glow texture: pre-rendered radial gradient, `drawImage` per particle
+- [ ] `nebula` and `glow` toggles in editor UI, serialized in presets
+
+## Phase 2.10 — Edge-to-Main Connection Lines
+
+**Goal:** Lines from edge particles to nearby main particles.
+
+- [ ] Screen-space distance threshold (180px)
+- [ ] Up to 6 nearest main particles per edge particle
+- [ ] Alpha fades with distance
+- [ ] Toggle in editor UI, serialized in presets
+
+## Phase 2.11 — Timeline / Auto-Preset Cycling
 
 **Goal:** Automated preset cycling for CasparCG / kiosk.
 
@@ -81,7 +118,7 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 - [ ] Play/pause/stop controls
 - [ ] Auto-cycling in playback mode via `?mode=play&preset=playlist.json`
 
-## Phase 2.8 — CasparCG & Kiosk Optimization
+## Phase 2.12 — CasparCG & Kiosk Optimization
 
 **Goal:** Production-ready for live event use.
 
@@ -91,7 +128,7 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 - [ ] Memory leak audit — cancel rAF on page hide
 - [ ] Verify CEF `file://` fetch behavior
 
-## Phase 2.9 — CLI Tool
+## Phase 2.13 — CLI Tool
 
 **Goal:** Generate presets from SVG files server-side.
 

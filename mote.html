@@ -190,6 +190,12 @@ canvas{display:block;width:100%;height:100%}
                     <span style="font-size:11px;opacity:.5" id="v-edgeShimmer">Off</span>
                   </label>
                 </div>
+                <div class="param-row"><label>Starfield</label>
+                  <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="checkbox" id="p-starfield" style="accent-color:var(--accent)">
+                    <span style="font-size:11px;opacity:.5" id="v-starfield">Off</span>
+                  </label>
+                </div>
                 <div class="param-row"><label>Transition</label><input type="range" id="p-transitionDuration" min="0" max="3000" step="100"><span class="param-val" id="v-transitionDuration"></span></div>
               </div>
 
@@ -276,6 +282,7 @@ const DEFAULT_PARAMS = {
   renderMode: 'dots',
   trails: false,
   edgeShimmer: false,
+  starfield: false,
   transitionDuration: 800,
   lineThreshold: 60
 };
@@ -332,6 +339,9 @@ let yRotEnabled = true;
 const keys = {};
 let edgeParticles = []; // edge particles for shimmer effect
 let transition = null; // { startTime, duration, oldParticles, oldEdgeParticles }
+let stars = [];
+let dragState = { active: false, startX: 0, startY: 0, moved: false };
+const DRAG_SENSITIVITY = 0.008;
 
 // ── URL mode ──────────────────────────────────────────────────
 const urlParams = new URLSearchParams(window.location.search);
@@ -864,6 +874,39 @@ const RENDER_MODES = {
   }
 };
 
+function initStars() {
+  const list = [];
+  for (let layer = 0; layer < 2; layer++) {
+    const count = 156 + layer * 78;
+    const depth = 0.3 + layer * 0.4;
+    for (let i = 0; i < count; i++) {
+      list.push({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        r: 0.3 + Math.random() * (1.2 - layer * 0.4),
+        a: 0.15 + Math.random() * (0.55 - layer * 0.15),
+        depth: depth
+      });
+    }
+  }
+  stars = list;
+}
+
+function drawStars() {
+  ctx.fillStyle = '#ffffff';
+  for (const s of stars) {
+    const ox = yawAngle * 80 * s.depth;
+    const oy = pitchAngle * 60 * s.depth;
+    const sx = (s.x + ox + W) % W;
+    const sy = (s.y + oy + H) % H;
+    ctx.globalAlpha = s.a;
+    ctx.beginPath();
+    ctx.arc(sx, sy, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
 function frame(t) {
   try {
     const p = params;
@@ -874,6 +917,8 @@ function frame(t) {
     } else {
       ctx.clearRect(0, 0, W, H);
     }
+    // Starfield background
+    if (p.starfield && stars.length) drawStars();
     if (!particles.length || !logoCanvas) {
       animId = requestAnimationFrame(frame);
       return;
@@ -1299,6 +1344,19 @@ function initUI() {
     });
   }
 
+  // Starfield checkbox
+  const starfieldCheck = document.getElementById('p-starfield');
+  const starfieldLabel = document.getElementById('v-starfield');
+  if (starfieldCheck) {
+    starfieldCheck.checked = params.starfield;
+    starfieldLabel.textContent = params.starfield ? 'On' : 'Off';
+    starfieldCheck.addEventListener('change', () => {
+      params.starfield = starfieldCheck.checked;
+      starfieldLabel.textContent = starfieldCheck.checked ? 'On' : 'Off';
+      if (starfieldCheck.checked) initStars();
+    });
+  }
+
   // Color mode select
   const colorModeSelect = document.getElementById('p-colorMode');
   if (colorModeSelect) {
@@ -1471,6 +1529,9 @@ function updateUI() {
   const edgeShimmerCheck = document.getElementById('p-edgeShimmer');
   const edgeShimmerLabel = document.getElementById('v-edgeShimmer');
   if (edgeShimmerCheck) { edgeShimmerCheck.checked = params.edgeShimmer; edgeShimmerLabel.textContent = params.edgeShimmer ? 'On' : 'Off'; }
+  const starfieldCheck = document.getElementById('p-starfield');
+  const starfieldLabel = document.getElementById('v-starfield');
+  if (starfieldCheck) { starfieldCheck.checked = params.starfield; starfieldLabel.textContent = params.starfield ? 'On' : 'Off'; }
   const colorModeSelect = document.getElementById('p-colorMode');
   if (colorModeSelect) { colorModeSelect.value = params.colorMode; }
   const color2Input = document.getElementById('p-colorSecondary');
@@ -1975,6 +2036,44 @@ async function boot() {
     catch (e) { console.error('Mote loop error:', e); }
   }
   loop();
+
+  // Init starfield
+  initStars();
+  window.addEventListener('resize', () => {
+    if (params.starfield) initStars();
+  });
+
+  // Drag rotation
+  function onPointerDown(e) {
+    const p = e.touches ? e.touches[0] || e.changedTouches[0] : e;
+    dragState.active = true;
+    dragState.startX = p.clientX;
+    dragState.startY = p.clientY;
+    dragState.moved = false;
+  }
+  function onPointerMove(e) {
+    if (!dragState.active) return;
+    const p = e.touches ? e.touches[0] || e.changedTouches[0] : e;
+    const dx = p.clientX - dragState.startX;
+    const dy = p.clientY - dragState.startY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragState.moved = true;
+    yawAngle += dx * DRAG_SENSITIVITY;
+    pitchAngle += dy * DRAG_SENSITIVITY;
+    dragState.startX = p.clientX;
+    dragState.startY = p.clientY;
+  }
+  function onPointerUp(e) {
+    if (dragState.active && !dragState.moved) {
+      yRotEnabled = !yRotEnabled;
+    }
+    dragState.active = false;
+  }
+  window.addEventListener('mousedown', onPointerDown);
+  window.addEventListener('mousemove', onPointerMove);
+  window.addEventListener('mouseup', onPointerUp);
+  window.addEventListener('touchstart', onPointerDown, { passive: true });
+  window.addEventListener('touchmove', onPointerMove, { passive: true });
+  window.addEventListener('touchend', onPointerUp, { passive: true });
 
   // Keyboard controls
   document.addEventListener('keydown', e => { keys[e.key] = true; if (e.key === '/') yRotEnabled = !yRotEnabled; });
