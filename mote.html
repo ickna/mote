@@ -348,6 +348,12 @@ canvas{display:block;width:100%;height:100%}
                     <div class="audio-meter-bar" id="audio-meter-treble"></div>
                   </div>
                 </div>
+                <div class="param-row"><label>Nebula</label>
+                  <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="checkbox" id="p-nebulaEnabled" style="accent-color:var(--accent)">
+                    <span style="font-size:11px;opacity:.5" id="v-nebulaEnabled">Off</span>
+                  </label>
+                </div>
                 <div class="param-row"><label>Drag Rotate</label>
                   <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
                     <input type="checkbox" id="p-dragEnabled" style="accent-color:var(--accent)">
@@ -2357,6 +2363,7 @@ function frame(t) {
 
 async function loadSVG(svgString, keepParticles) {
   currentSVG = svgString;
+  nebulaCache = null;  // invalidate nebula cache on SVG change
 
   // Detect image data URIs
   if (svgString.startsWith('data:image/')) {
@@ -2891,6 +2898,18 @@ function initUI() {
     });
   }
 
+  // Nebula toggle
+  const nebulaCheck = document.getElementById('p-nebulaEnabled');
+  const nebulaLabelN = document.getElementById('v-nebulaEnabled');
+  if (nebulaCheck) {
+    nebulaCheck.checked = params.nebulaEnabled;
+    nebulaLabelN.textContent = params.nebulaEnabled ? 'On' : 'Off';
+    nebulaCheck.addEventListener('change', () => {
+      params.nebulaEnabled = nebulaCheck.checked;
+      nebulaLabelN.textContent = nebulaCheck.checked ? 'On' : 'Off';
+    });
+  }
+
   // Color mode select
   const colorModeSelect = document.getElementById('p-colorMode');
   if (colorModeSelect) {
@@ -3220,6 +3239,7 @@ function updateUI() {
   cb('p-audioEnabled', 'audioEnabled');
   // Drag
   cb('p-dragEnabled', 'dragEnabled');
+  cb('p-nebulaEnabled', 'nebulaEnabled');
   const audioSourceSelect = document.getElementById('p-audioSource');
   if (audioSourceSelect) audioSourceSelect.value = params.audioSource;
   const audioImpactSlider = document.getElementById('p-audioImpact');
