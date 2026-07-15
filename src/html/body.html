@@ -168,6 +168,7 @@
                   <button class="fx-btn" id="btn-fx-ice">❄️ Ice</button>
                   <button class="fx-btn" id="btn-fx-fire">🔥 Fire</button>
                   <button class="fx-btn" id="btn-fx-lightning">⚡ Bolt</button>
+                <button class="btn-sm" id="btn-fx-burst">💥 Burst</button>
                 </div>
                 <div class="panel-section">
                   <h3>Post-Processing</h3>
@@ -239,6 +240,13 @@
                     <span style="font-size:11px;opacity:.5" id="v-strobeEnabled">Off</span>
                   </label>
                 </div>
+                <div class="param-row"><label>Kaleidoscope</label>
+                  <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="checkbox" id="p-kaleidoscopeEnabled" style="accent-color:var(--accent)">
+                    <span style="font-size:11px;opacity:.5" id="v-kaleidoscopeEnabled">Off</span>
+                  </label>
+                </div>
+                <div class="param-row"><label>Segments</label><input type="range" id="p-kaleidoscopeSegments" min="2" max="16" step="1"><span class="param-val" id="v-kaleidoscopeSegments"></span></div>
 <div class="param-row"><label>Swirl</label>
                   <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
                     <input type="checkbox" id="p-swirlEnabled" style="accent-color:var(--accent)">

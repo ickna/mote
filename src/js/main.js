@@ -78,7 +78,13 @@ const DEFAULT_PARAMS = {
   strobeRate: 8,
   // Swirl
   swirlEnabled: false,
-  swirlIntensity: 0.3
+  swirlIntensity: 0.3,
+  // Burst
+  burstForce: 5,
+  burstDecay: 0.95,
+  // Kaleidoscope
+  kaleidoscopeEnabled: false,
+  kaleidoscopeSegments: 6
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -1615,6 +1621,28 @@ function frame(t) {
       }
 
       // Edge shimmer (always on) — update sparkles then render
+      // Kaleidoscope mirroring
+      if (p.kaleidoscopeEnabled && p.kaleidoscopeSegments > 1) {
+        const segs = p.kaleidoscopeSegments;
+        const angleStep = (Math.PI * 2) / segs;
+        for (let s = 1; s < segs; s++) {
+          const angle = angleStep * s;
+          const cosA = Math.cos(angle), sinA = Math.sin(angle);
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(angle);
+          ctx.translate(-cx, -cy);
+          ctx.globalAlpha = 0.15;
+          for (const pp of projected) {
+            ctx.fillStyle = LOGO_COLOR;
+            ctx.beginPath();
+            ctx.arc(pp.px, pp.py, Math.max(pp.r * 0.6, 0.3), 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+      }
       for (const ep of edgeParticles) {
         if (ep.sparkle <= 0) {
           if (Math.random() < 0.24) ep.sparkle = 0.5 + Math.random() * 0.5;
@@ -2233,6 +2261,9 @@ const paramBindings = [
   { id: "hueCycleSpeed", el: "p-hueCycleSpeed", val: "v-hueCycleSpeed", min: 0.05, max: 3, step: 0.05 },
   { id: "strobeRate", el: "p-strobeRate", val: "v-strobeRate", min: 1, max: 30, step: 1 },
   { id: "swirlIntensity", el: "p-swirlIntensity", val: "v-swirlIntensity", min: 0, max: 1, step: 0.02 },
+  { id: "burstForce", el: "p-burstForce", val: "v-burstForce", min: 1, max: 20, step: 0.5 },
+  { id: "burstDecay", el: "p-burstDecay", val: "v-burstDecay", min: 0.8, max: 0.99, step: 0.01 },
+  { id: "kaleidoscopeSegments", el: "p-kaleidoscopeSegments", val: "v-kaleidoscopeSegments", min: 2, max: 16, step: 1 },
 ];
 
 function initUI() {
@@ -2449,6 +2480,8 @@ function initUI() {
   const hueLabel2 = document.getElementById("v-hueCycle");
   if(hueCheck){hueCheck.checked=params.hueCycle;hueLabel2.textContent=params.hueCycle?"On":"Off";hueCheck.addEventListener("change",()=>{params.hueCycle=hueCheck.checked;hueLabel2.textContent=hueCheck.checked?"On":"Off"});}
   // Strobe toggle
+  // Kaleido toggle
+  const kaleiCheck=document.getElementById("p-kaleidoscopeEnabled");const kaleiLabel=document.getElementById("v-kaleidoscopeEnabled");if(kaleiCheck){kaleiCheck.checked=params.kaleidoscopeEnabled;kaleiLabel.textContent=params.kaleidoscopeEnabled?"On":"Off";kaleiCheck.addEventListener("change",()=>{params.kaleidoscopeEnabled=kaleiCheck.checked;kaleiLabel.textContent=kaleiCheck.checked?"On":"Off"});}
   const strobeCheck=document.getElementById("p-strobeEnabled");const strobeLabel=document.getElementById("v-strobeEnabled");if(strobeCheck){strobeCheck.checked=params.strobeEnabled;strobeLabel.textContent=params.strobeEnabled?"On":"Off";strobeCheck.addEventListener("change",()=>{params.strobeEnabled=strobeCheck.checked;strobeLabel.textContent=strobeCheck.checked?"On":"Off"});}
   // Color mode select
   const colorModeSelect = document.getElementById('p-colorMode');
@@ -2783,6 +2816,7 @@ function updateUI() {
   cb("p-hueCycle", "hueCycle");
   cb("p-strobeEnabled", "strobeEnabled");
   cb("p-swirlEnabled", "swirlEnabled");
+  cb("p-kaleidoscopeEnabled", "kaleidoscopeEnabled");
   const audioSourceSelect = document.getElementById('p-audioSource');
   if (audioSourceSelect) audioSourceSelect.value = params.audioSource;
   const audioImpactSlider = document.getElementById('p-audioImpact');
@@ -3698,7 +3732,9 @@ let pmenuButtonTimer = 0;
 function triggerAction(action) {
   if (action === 'ice') { const idx = Math.floor(Math.random() * edgeParticles.length); if (edgeParticles[idx]) { edgeParticles[idx].flame = -2.0; PRESET.params.flameEnabled = true; } }
   else if (action === 'fire') { const idx = Math.floor(Math.random() * edgeParticles.length); if (edgeParticles[idx]) { edgeParticles[idx].flame = 2.0; PRESET.params.flameEnabled = true; } }
-  else if (action === 'lightning') { PRESET.params.lightningEnabled = true; spawnGuidedBolt(); }
+  } else if (action === "burst") {
+    const f = params.burstForce || 5;
+    for (const p of particles) { p.vx = (Math.random()-0.5)*f; p.vy = (Math.random()-0.5)*f; p.vz = (Math.random()-0.5)*f*0.3; }
 }
 
 function processButtons() {
@@ -4281,7 +4317,9 @@ document.addEventListener('keydown', function(e) {
   if (e.key === '=' || e.key === '+') { const idx = Math.floor(Math.random() * edgeParticles.length); if (edgeParticles[idx]) { edgeParticles[idx].flame = -2.0; PRESET.params.flameEnabled = true; } }
     if (e.key === '\\\\' || e.key === '|') { const idx = Math.floor(Math.random() * edgeParticles.length); if (edgeParticles[idx]) { edgeParticles[idx].flame = 2.0; PRESET.params.flameEnabled = true; } }
     if (e.key === '-' || e.key === '_') { PRESET.params.lightningEnabled = true; spawnChainLightning(); }
-    if (e.key === '0' || e.key === ')') { PRESET.params.lightningEnabled = true; spawnGuidedBolt(); }
+  } else if (action === "burst") {
+    const f = params.burstForce || 5;
+    for (const p of particles) { p.vx = (Math.random()-0.5)*f; p.vy = (Math.random()-0.5)*f; p.vz = (Math.random()-0.5)*f*0.3; }
   });
   document.addEventListener('keyup', function(e) { keys[e.key] = false; });
 
@@ -4348,7 +4386,9 @@ function triggerAction(action) {
     if (edgeParticles[idx]) { edgeParticles[idx].flame = 2.0; params.flameEnabled = true; }
   } else if (action === 'lightning') {
     params.lightningEnabled = true;
-    spawnGuidedBolt();
+  } else if (action === "burst") {
+    const f = params.burstForce || 5;
+    for (const p of particles) { p.vx = (Math.random()-0.5)*f; p.vy = (Math.random()-0.5)*f; p.vz = (Math.random()-0.5)*f*0.3; }
   }
 }
 
@@ -4630,7 +4670,6 @@ async function boot() {
   if (params.dragEnabled) setDragEnabled(true);
 
   // Keyboard controls
-  document.addEventListener('keydown', e => { keys[e.key] = true; if (e.key === '/') yRotEnabled = !yRotEnabled; if (e.key === '=' || e.key === '+') { const idx = Math.floor(Math.random() * edgeParticles.length); if (edgeParticles[idx]) { edgeParticles[idx].flame = -2.0; params.flameEnabled = true; } } if (e.key === '\\' || e.key === '|') { const idx = Math.floor(Math.random() * edgeParticles.length); if (edgeParticles[idx]) { edgeParticles[idx].flame = 2.0; params.flameEnabled = true; } } if (e.key === '-' || e.key === '_') { params.lightningEnabled = true; spawnChainLightning(); } if (e.key === '0' || e.key === ')') { params.lightningEnabled = true; spawnGuidedBolt(); } });
   document.addEventListener('keyup', e => { keys[e.key] = false; });
 
   // Hide loading (500ms default, 3s fallback for ickna profile with heavy particle count)
