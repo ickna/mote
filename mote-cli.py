@@ -889,8 +889,8 @@ function frame(t) {
       // Wave motion
       let waveX, waveY, waveZ;
       if (p.waveMode === 'am') {
-        waveX = (3 + 2 * Math.sin(t * 0.0006 + pt.phase)) * Math.sin(t * 0.002 + pt.phase + pt.ty * 0.01);
-        waveY = (3 + 2 * Math.sin(t * 0.0008 + pt.phase * 1.3)) * Math.cos(t * 0.0025 + pt.phase * 0.7 + pt.tx * 0.008);
+        const waScale = p.waveAmp / 12; waveX = waScale * (3 + 2 * Math.sin(t * 0.0006 + pt.phase)) * Math.sin(t * 0.002 + pt.phase + pt.ty * 0.01);
+        waveY = waScale * (3 + 2 * Math.sin(t * 0.0008 + pt.phase * 1.3)) * Math.cos(t * 0.0025 + pt.phase * 0.7 + pt.tx * 0.008);
         waveZ = 0;
       } else {
         waveX = p.waveAmp * Math.sin(t * p.waveFreq + pt.phase + pt.ty * 0.01);
@@ -927,7 +927,7 @@ function frame(t) {
       // Depth fade
       let depthFade;
       if (p.depthFadeMode === 'ickna') {
-        depthFade = 0.5 + 0.5 * Math.max(0.625, 1 - (zOffset - 100) / 250);
+        depthFade = (0.5 + 0.5 * Math.max(0.625, 1 - (zOffset - 100) / 250)) * (0.3 + p.depthFade * 0.7);
       } else {
         depthFade = p.depthFade ? Math.min(1, (zOffset + 100) / 300) : 1;
       }
@@ -1002,7 +1002,7 @@ function frame(t) {
       // Glow halos via glowTex
       if (p.glowMode === 'texture') {
         for (const pp of projected) {
-          const glowSize = Math.max(pp.r * 6, 6);
+          const glowSize = Math.max(pp.r * 6, 6) * (0.5 + p.glowBlur / 6);
           const tempScale = (pp.pt && pp.pt.flame < 0) ? Math.max(0.15, 1 + pp.pt.flame * 0.425) : 1;
           const adjGlowSize = glowSize * tempScale;
           ctx.globalAlpha = Math.max(0.2, Math.min(0.7, pp.alpha * 0.6));
