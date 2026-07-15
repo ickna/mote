@@ -242,10 +242,10 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Overlay multiple SVGs/images as separate particle layers, each with its own params.
 
-- [ ] `layers` array in preset format
-- [ ] Backwards compat: single-layer presets auto-convert to `layers: [{...}]`
-- [ ] Engine renders layers in z-order, each with own rotation/params
-- [ ] Editor layer management: add/remove/reorder, select active layer
+- [x] `layers` array in preset format
+- [x] Backwards compat: single-layer presets auto-convert to `layers: [{...}]`
+- [x] Engine renders layers in z-order, each with own rotation/params
+- [x] Editor layer management: add/remove/reorder, select active layer (JSON-based)
 - [ ] Layer-aware transitions
 
 ## Phase 3.10 — Image Source

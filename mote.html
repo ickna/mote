@@ -615,6 +615,7 @@ let yawSpd = 0, pitchSpd = 0;
 let yRotEnabled = true;
 const keys = {};
 let edgeParticles = []; // edge particles for shimmer effect
+let layers = [];           // multi-layer: [{name, svg, params, logoCanvas, particles, edgeParticles, waveNodes}]
 let transition = null; // { startTime, duration, oldParticles, oldEdgeParticles }
 let stars = [];
 let lightningQueue = [];   // { idx, type:'edge'|'main', parentIdx, parentType, delay, hop }
@@ -1973,6 +1974,46 @@ function frame(t) {
       }
     }
 
+    // ── Step 5.5: Additional layers ──
+    for (let li = 0; li < layers.length; li++) {
+      const layer = layers[li];
+      if (!layer.particles || !layer.logoCanvas) continue;
+      const lp = layer.params;
+      const lLOGO_COLOR = lp.color || '#e03030';
+
+      // Project layer particles
+      const lProj = [];
+      for (const pt of layer.particles) {
+        // Simple projection with same rotation
+        const wx = (3 + 2 * Math.sin(t * 0.0006 + pt.phase)) * Math.sin(t * 0.002 + pt.phase + pt.ty * 0.01);
+        const wy = (3 + 2 * Math.sin(t * 0.0008 + pt.phase * 1.3)) * Math.cos(t * 0.0025 + pt.phase * 0.7 + pt.tx * 0.008);
+        const tx = pt.tx + wx, ty = pt.ty + wy, tz = 0;
+
+        const rotated = applyRotYawPitch({x: tx - lcx, y: ty - lcy, z: tz}, effectiveYaw, pitch);
+        const zOff = rotated.z + 200;
+        const ps = FOCAL / (FOCAL + zOff);
+        const sx = rotated.x * ps * baseS + cx;
+        const sy = rotated.y * ps * baseS + cy;
+
+        const sizePulse = 1.4 + 0.4 * Math.sin(t * 0.002 + pt.phase);
+        const ss = Math.max(pt.size * ps * baseS * sizePulse * (lp.sizeScale || 0.48), 0.3);
+        const df = 0.5 + 0.5 * Math.max(0.625, 1 - (zOff - 100) / 250);
+
+        lProj.push({ px: sx, py: sy, r: ss, z: zOff, alpha: df });
+      }
+      lProj.sort(function(a, b) { return a.z - b.z; });
+
+      // Render layer particles
+      for (const pp of lProj) {
+        ctx.globalAlpha = Math.max(0.3, Math.min(1, pp.alpha));
+        ctx.fillStyle = lLOGO_COLOR;
+        ctx.beginPath();
+        ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
     // ── Step 6: Lightning ──
     if (lightningBolts.length || lightningPaths.length || edgeParticles.some(e => e.lightning > 0.01)) {
       ctx.shadowBlur = 0;
@@ -2362,13 +2403,19 @@ function applyParams(newParams) {
 }
 
 function getPreset() {
-  return {
+  const preset = {
     name: presetName,
     version: 2,
     svg: currentSVG,
     params: { ...params },
     anim: JSON.parse(JSON.stringify(params.anim || {}))
   };
+  if (layers.length > 0) {
+    preset.layers = layers.map(function(l) {
+      return { name: l.name, svg: l.svg, params: l.params };
+    });
+  }
+  return preset;
 }
 
 function loadPreset(preset) {
@@ -2383,13 +2430,45 @@ function loadPreset(preset) {
   }
   presetName = preset.name || 'unnamed';
   applyParams(preset.params || DEFAULT_PARAMS);
-  // Handle anim from top-level preset field (if present)
   if (preset.anim) params.anim = JSON.parse(JSON.stringify(preset.anim));
   animStartTime = performance.now();
+
+  // Multi-layer: load each layer's SVG
+  if (preset.layers && preset.layers.length > 0) {
+    layers = preset.layers.map(function(l) {
+      return { name: l.name || 'layer', svg: l.svg, params: { ...DEFAULT_PARAMS, ...(l.params || {}) }, logoCanvas: null, particles: null, edgeParticles: null, waveNodes: null };
+    });
+    // Load each layer asynchronously
+    layers.forEach(function(layer) {
+      loadLayer(layer);
+    });
+  } else {
+    layers = [];
+  }
+
   loadSVG(preset.svg || ICKNA_SVG);
   if (isPlayMode) {
     document.getElementById('player-preset-name').textContent = presetName;
   }
+}
+
+async function loadLayer(layer) {
+  const result = await MoteSVG.renderToCanvas(layer.svg, 1000);
+  if (!result) return;
+  layer.logoCanvas = result.canvas;
+  layer.particles = sampleIckna(result.canvas);
+  // Each layer gets its own edge particles for shimmer
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(layer.svg, 'image/svg+xml');
+  const svg = doc.querySelector('svg');
+  let svgW = 400, svgH = 300;
+  if (svg) {
+    const vb = svg.getAttribute('viewBox');
+    if (vb) { const pts = vb.split(/[\\s,]+/).map(Number); svgW = pts[2]-pts[0]; svgH = pts[3]-pts[1]; }
+    else { svgW = parseInt(svg.getAttribute('width'))||400; svgH = parseInt(svg.getAttribute('height'))||300; }
+  }
+  layer.edgeParticles = [];
+  layer.waveNodes = [];
 }
 
 // ═══════════════════════════════════════════════════════════════
