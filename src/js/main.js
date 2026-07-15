@@ -84,7 +84,10 @@ const DEFAULT_PARAMS = {
   burstDecay: 0.95,
   // Kaleidoscope
   kaleidoscopeEnabled: false,
-  kaleidoscopeSegments: 6
+  kaleidoscopeSegments: 6,
+  // God Rays
+  godRaysEnabled: false,
+  godRaysIntensity: 0.4
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -1910,6 +1913,25 @@ function frame(t) {
       ctx.fillStyle = "rgba(255,255,255," + strobeAlpha.toFixed(2) + ")";
       ctx.fillRect(0, 0, W, H);
     }
+    // God rays — light beams from logo center with noise modulation
+    if (p.godRaysEnabled) {
+      const nrays = 48, maxLen = Math.max(W, H) * 0.8;
+      ctx.globalAlpha = p.godRaysIntensity * 0.25;
+      for (let i = 0; i < nrays; i++) {
+        const angle = (Math.PI * 2 * i) / nrays;
+        const n = typeof simplex !== 'undefined' ? simplex.noise(Math.cos(angle) * 2 + t * 0.0001, Math.sin(angle) * 2 + t * 0.0001) : Math.sin(angle * 3 + t * 0.0005);
+        const len = maxLen * (0.3 + 0.7 * ((n + 1) * 0.5));
+        const ex = cx + Math.cos(angle) * len, ey = cy + Math.sin(angle) * len;
+        const grad = ctx.createLinearGradient(cx, cy, ex, ey);
+        grad.addColorStop(0, 'rgba(255,255,255,0.8)');
+        grad.addColorStop(0.3, 'rgba(255,255,255,0.2)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.5 + ((n + 1) * 0.5) * 3;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
   } catch (e) {
     console.error('Mote frame error:', e);
   }
@@ -2264,6 +2286,7 @@ const paramBindings = [
   { id: "burstForce", el: "p-burstForce", val: "v-burstForce", min: 1, max: 20, step: 0.5 },
   { id: "burstDecay", el: "p-burstDecay", val: "v-burstDecay", min: 0.8, max: 0.99, step: 0.01 },
   { id: "kaleidoscopeSegments", el: "p-kaleidoscopeSegments", val: "v-kaleidoscopeSegments", min: 2, max: 16, step: 1 },
+  { id: "godRaysIntensity", el: "p-godRaysIntensity", val: "v-godRaysIntensity", min: 0.1, max: 1, step: 0.05 },
 ];
 
 function initUI() {
@@ -2481,6 +2504,8 @@ function initUI() {
   if(hueCheck){hueCheck.checked=params.hueCycle;hueLabel2.textContent=params.hueCycle?"On":"Off";hueCheck.addEventListener("change",()=>{params.hueCycle=hueCheck.checked;hueLabel2.textContent=hueCheck.checked?"On":"Off"});}
   // Strobe toggle
   // Kaleido toggle
+  // God Rays toggle
+  const grCheck=document.getElementById("p-godRaysEnabled");const grLabel=document.getElementById("v-godRaysEnabled");if(grCheck){grCheck.checked=params.godRaysEnabled;grLabel.textContent=params.godRaysEnabled?"On":"Off";grCheck.addEventListener("change",()=>{params.godRaysEnabled=grCheck.checked;grLabel.textContent=grCheck.checked?"On":"Off"});}
   const kaleiCheck=document.getElementById("p-kaleidoscopeEnabled");const kaleiLabel=document.getElementById("v-kaleidoscopeEnabled");if(kaleiCheck){kaleiCheck.checked=params.kaleidoscopeEnabled;kaleiLabel.textContent=params.kaleidoscopeEnabled?"On":"Off";kaleiCheck.addEventListener("change",()=>{params.kaleidoscopeEnabled=kaleiCheck.checked;kaleiLabel.textContent=kaleiCheck.checked?"On":"Off"});}
   const strobeCheck=document.getElementById("p-strobeEnabled");const strobeLabel=document.getElementById("v-strobeEnabled");if(strobeCheck){strobeCheck.checked=params.strobeEnabled;strobeLabel.textContent=params.strobeEnabled?"On":"Off";strobeCheck.addEventListener("change",()=>{params.strobeEnabled=strobeCheck.checked;strobeLabel.textContent=strobeCheck.checked?"On":"Off"});}
   // Color mode select
@@ -2817,6 +2842,7 @@ function updateUI() {
   cb("p-strobeEnabled", "strobeEnabled");
   cb("p-swirlEnabled", "swirlEnabled");
   cb("p-kaleidoscopeEnabled", "kaleidoscopeEnabled");
+  cb("p-godRaysEnabled", "godRaysEnabled");
   const audioSourceSelect = document.getElementById('p-audioSource');
   if (audioSourceSelect) audioSourceSelect.value = params.audioSource;
   const audioImpactSlider = document.getElementById('p-audioImpact');
@@ -4294,6 +4320,25 @@ function frame(t) {
       const strobeAlpha = 0.5 + 0.5 * Math.sin(t * 0.001 * Math.PI * 2 * p.strobeRate);
       ctx.fillStyle = "rgba(255,255,255," + strobeAlpha.toFixed(2) + ")";
       ctx.fillRect(0, 0, W, H);
+    }
+    // God rays — light beams from logo center with noise modulation
+    if (p.godRaysEnabled) {
+      const nrays = 48, maxLen = Math.max(W, H) * 0.8;
+      ctx.globalAlpha = p.godRaysIntensity * 0.25;
+      for (let i = 0; i < nrays; i++) {
+        const angle = (Math.PI * 2 * i) / nrays;
+        const n = typeof simplex !== 'undefined' ? simplex.noise(Math.cos(angle) * 2 + t * 0.0001, Math.sin(angle) * 2 + t * 0.0001) : Math.sin(angle * 3 + t * 0.0005);
+        const len = maxLen * (0.3 + 0.7 * ((n + 1) * 0.5));
+        const ex = cx + Math.cos(angle) * len, ey = cy + Math.sin(angle) * len;
+        const grad = ctx.createLinearGradient(cx, cy, ex, ey);
+        grad.addColorStop(0, 'rgba(255,255,255,0.8)');
+        grad.addColorStop(0.3, 'rgba(255,255,255,0.2)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.5 + ((n + 1) * 0.5) * 3;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
     }
   } catch (e) {
     console.error('Mote frame error:', e);
