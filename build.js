@@ -47,23 +47,23 @@ const jsFiles = [
 
 let jsCode = '/** Mote — SVG-to-particle engine. Built ' + new Date().toISOString().slice(0,10) + ' */\n\n';
 
-for (const file of jsFiles) {
-  const fp = path.join(SRC, 'js', file);
-  if (!fs.existsSync(fp)) {
-    // Auto-create empty placeholder for optional modules
-    console.warn('  (skipping ' + file + ' — not found)');
-    continue;
-  }
-  const content = fs.readFileSync(fp, 'utf8').trim();
-  if (content) {
-    jsCode += '\n// ══ ' + file + ' ══\n' + content + '\n';
-  }
-}
+// Check if all module files exist — if not, fall back to monolithic main.js
+const allModulesExist = jsFiles.every(f => fs.existsSync(path.join(SRC, 'js', f)));
 
-// If any module is missing, fall back to main.js
-if (jsCode.length < 500) {
-  console.warn('No modules found, using main.js fallback');
+if (allModulesExist) {
+  for (const file of jsFiles) {
+    const fp = path.join(SRC, 'js', file);
+    const content = fs.readFileSync(fp, 'utf8').trim();
+    if (content) {
+      jsCode += '\n// ══ ' + file + ' ══\n' + content + '\n';
+    }
+  }
+  console.log('  (' + jsFiles.length + ' JS modules)');
+} else {
+  // Monolithic fallback
   jsCode = fs.readFileSync(path.join(SRC, 'js', 'main.js'), 'utf8');
+  const missing = jsFiles.filter(f => !fs.existsSync(path.join(SRC, 'js', f)));
+  console.log('  (using main.js — ' + missing.length + ' modules not yet extracted)');
 }
 
 // ── Assemble ───────────────────────────────────────────────────
