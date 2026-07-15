@@ -69,7 +69,16 @@ const DEFAULT_PARAMS = {
   // Interaction
   dragEnabled: false,
   // Nebula
-  nebulaEnabled: false
+  nebulaEnabled: false,
+  // Color Cycle
+  hueCycle: false,
+  hueCycleSpeed: 0.25,
+  // Strobe
+  strobeEnabled: false,
+  strobeRate: 8,
+  // Swirl
+  swirlEnabled: false,
+  swirlIntensity: 0.3
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -96,6 +105,9 @@ function lerpRgb(rgb1, rgb2, t) {
 }
 
 function getParticleColor(pt, p, rgb1, rgb2) {
+
+// HSL color cycling
+function hueShift(hex,delta){const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s,l=(mx+mn)/2;if(mx!==mn){const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);h=mx===r?((g-b)/d+(g<b?6:0))/6:mx===g?((b-r)/d+2)/6:((r-g)/d+4)/6;}h=(h+delta)%1;if(h<0)h+=1;const h2r=(p,q,t)=>{if(t<0)t+=1;if(t>1)t-=1;return t<1/6?p+(q-p)*6*t:t<1/2?q:t<2/3?p+(q-p)*(2/3-t)*6:p;};const q=l<.5?l*(1+s):l+s-l*s,p2=2*l-q,nr=Math.round(h2r(p2,q,h+1/3)*255),ng=Math.round(h2r(p2,q,h)*255),nb=Math.round(h2r(p2,q,h-1/3)*255);return"#"+[nr,ng,nb].map(v=>Math.max(0,Math.min(255,v)).toString(16).padStart(2,"0")).join("");}
   if (p.colorMode === 'solid' || !rgb2) return p.color;
   let t;
   switch (p.colorMode) {
@@ -1385,7 +1397,7 @@ function frame(t) {
     const projected = [];
     const waveOrigin = getWaveOrigin(t);
     const isIcknaRender = p.renderMode === 'ickna';
-    const LOGO_COLOR = p.color || '#e03030';
+    const LOGO_COLOR = p.hueCycle ? hueShift(p.color || "#e03030", t * 0.0003 * p.hueCycleSpeed) : (p.color || "#e03030");
 
     for (const pt of particles) {
       // Wave motion
@@ -1401,8 +1413,9 @@ function frame(t) {
         waveZ = p.waveAmp * 1.5 * Math.sin(t * p.waveFreq * 0.9 + pt.phase * 1.1 + pt.ty * 0.006);
       }
 
-      const targetX = pt.tx + waveX;
-      const targetY = pt.ty + waveY;
+      let targetX = pt.tx + waveX;
+      let targetY = pt.ty + waveY;
+      if (p.swirlEnabled) { const sx=targetX-lcx,sy=targetY-lcy,sd=Math.sqrt(sx*sx+sy*sy),sa=Math.atan2(sy,sx)+p.swirlIntensity*0.04*(1+sd*0.002);targetX=lcx+Math.cos(sa)*sd;targetY=lcy+Math.sin(sa)*sd; }
       const depthSign = Math.sin(t * 0.0003 + pt.tx * 0.01 + pt.ty * 0.01);
       const targetZ = depthSign * Math.min(35, (pt.edgeDist || 0) * 0.8) * (p.zDispersion / 60) + waveZ;
 
@@ -1862,6 +1875,13 @@ function frame(t) {
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
     applyPostProcessing(p);
+    
+    // Strobe flash overlay
+    if (p.strobeEnabled) {
+      const strobeAlpha = 0.5 + 0.5 * Math.sin(t * 0.001 * Math.PI * 2 * p.strobeRate);
+      ctx.fillStyle = "rgba(255,255,255," + strobeAlpha.toFixed(2) + ")";
+      ctx.fillRect(0, 0, W, H);
+    }
   } catch (e) {
     console.error('Mote frame error:', e);
   }
@@ -2209,7 +2229,10 @@ const paramBindings = [
   { id: 'trailAlpha', el: 'p-trailAlpha', val: 'v-trailAlpha', min: 0, max: 0.5, step: 0.01 },
   { id: 'edgeLineAlpha', el: 'p-edgeLineAlpha', val: 'v-edgeLineAlpha', min: 0, max: 1, step: 0.02 },
   { id: 'lineThreshold', el: 'p-lineThreshold', val: 'v-lineThreshold', min: 20, max: 200, step: 2 },
-  { id: 'transitionDuration', el: 'p-transitionDuration', val: 'v-transitionDuration', min: 0, max: 3000, step: 100 }
+  { id: 'transitionDuration', el: 'p-transitionDuration', val: 'v-transitionDuration', min: 0, max: 3000, step: 100 },
+  { id: "hueCycleSpeed", el: "p-hueCycleSpeed", val: "v-hueCycleSpeed", min: 0.05, max: 3, step: 0.05 },
+  { id: "strobeRate", el: "p-strobeRate", val: "v-strobeRate", min: 1, max: 30, step: 1 },
+  { id: "swirlIntensity", el: "p-swirlIntensity", val: "v-swirlIntensity", min: 0, max: 1, step: 0.02 },
 ];
 
 function initUI() {
@@ -2421,6 +2444,12 @@ function initUI() {
     });
   }
 
+  // Hue cycle toggle
+  const hueCheck = document.getElementById("p-hueCycle");
+  const hueLabel2 = document.getElementById("v-hueCycle");
+  if(hueCheck){hueCheck.checked=params.hueCycle;hueLabel2.textContent=params.hueCycle?"On":"Off";hueCheck.addEventListener("change",()=>{params.hueCycle=hueCheck.checked;hueLabel2.textContent=hueCheck.checked?"On":"Off"});}
+  // Strobe toggle
+  const strobeCheck=document.getElementById("p-strobeEnabled");const strobeLabel=document.getElementById("v-strobeEnabled");if(strobeCheck){strobeCheck.checked=params.strobeEnabled;strobeLabel.textContent=params.strobeEnabled?"On":"Off";strobeCheck.addEventListener("change",()=>{params.strobeEnabled=strobeCheck.checked;strobeLabel.textContent=strobeCheck.checked?"On":"Off"});}
   // Color mode select
   const colorModeSelect = document.getElementById('p-colorMode');
   if (colorModeSelect) {
@@ -2751,6 +2780,9 @@ function updateUI() {
   // Drag
   cb('p-dragEnabled', 'dragEnabled');
   cb('p-nebulaEnabled', 'nebulaEnabled');
+  cb("p-hueCycle", "hueCycle");
+  cb("p-strobeEnabled", "strobeEnabled");
+  cb("p-swirlEnabled", "swirlEnabled");
   const audioSourceSelect = document.getElementById('p-audioSource');
   if (audioSourceSelect) audioSourceSelect.value = params.audioSource;
   const audioImpactSlider = document.getElementById('p-audioImpact');
@@ -3897,8 +3929,9 @@ function frame(t) {
         waveY = p.waveAmp * 0.6 * Math.cos(t * p.waveFreq * 1.2 + pt.phase * 0.7 + pt.tx * 0.008);
         waveZ = p.waveAmp * 1.5 * Math.sin(t * p.waveFreq * 0.9 + pt.phase * 1.1 + pt.ty * 0.006);
       }
-      const targetX = pt.tx + waveX;
-      const targetY = pt.ty + waveY;
+      let targetX = pt.tx + waveX;
+      let targetY = pt.ty + waveY;
+      if (p.swirlEnabled) { const sx=targetX-lcx,sy=targetY-lcy,sd=Math.sqrt(sx*sx+sy*sy),sa=Math.atan2(sy,sx)+p.swirlIntensity*0.04*(1+sd*0.002);targetX=lcx+Math.cos(sa)*sd;targetY=lcy+Math.sin(sa)*sd; }
       const depthSign = Math.sin(t * 0.0003 + pt.tx * 0.01 + pt.ty * 0.01);
       const targetZ = depthSign * Math.min(35, (pt.edgeDist || 0) * 0.8) * (p.zDispersion / 60) + waveZ;
       const rotated = applyRotYawPitch({x: targetX - lcx, y: targetY - lcy, z: targetZ}, effectiveYaw, pitch);
@@ -4219,6 +4252,13 @@ function frame(t) {
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
     applyPostProcessing(p);
+    
+    // Strobe flash overlay
+    if (p.strobeEnabled) {
+      const strobeAlpha = 0.5 + 0.5 * Math.sin(t * 0.001 * Math.PI * 2 * p.strobeRate);
+      ctx.fillStyle = "rgba(255,255,255," + strobeAlpha.toFixed(2) + ")";
+      ctx.fillRect(0, 0, W, H);
+    }
   } catch (e) {
     console.error('Mote frame error:', e);
   }

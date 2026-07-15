@@ -226,7 +226,26 @@
                     <span style="font-size:11px;opacity:.5" id="v-dragEnabled">Off</span>
                   </label>
                 </div>
-                <div class="param-row"><label>Transition</label><input type="range" id="p-transitionDuration" min="0" max="3000" step="100"><span class="param-val" id="v-transitionDuration"></span></div>
+<div class="param-row"><label>Hue Cycle</label>
+                  <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="checkbox" id="p-hueCycle" style="accent-color:var(--accent)">
+                    <span style="font-size:11px;opacity:.5" id="v-hueCycle">Off</span>
+                  </label>
+                </div>
+                <div class="param-row"><label>Hue Speed</label><input type="range" id="p-hueCycleSpeed" min="0.05" max="3" step="0.05"><span class="param-val" id="v-hueCycleSpeed"></span></div>
+                <div class="param-row"><label>Strobe</label>
+                  <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="checkbox" id="p-strobeEnabled" style="accent-color:var(--accent)">
+                    <span style="font-size:11px;opacity:.5" id="v-strobeEnabled">Off</span>
+                  </label>
+                </div>
+<div class="param-row"><label>Swirl</label>
+                  <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="checkbox" id="p-swirlEnabled" style="accent-color:var(--accent)">
+                    <span style="font-size:11px;opacity:.5" id="v-swirlEnabled">Off</span>
+                  </label>
+                </div>
+                <div class="param-row"><label>Swirl Intensity</label><input type="range" id="p-swirlIntensity" min="0" max="1" step="0.02"><span class="param-val" id="v-swirlIntensity"></span></div>
               </div>
 
               <div class="btn-row">
