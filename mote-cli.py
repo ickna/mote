@@ -1203,10 +1203,10 @@ function frame(t) {
 
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
+    applyPostProcessing(p);
   } catch (e) {
     console.error('Mote frame error:', e);
   }
-  applyPostProcessing(p);
   animId = requestAnimationFrame(frame);
 }
 
