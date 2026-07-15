@@ -2395,10 +2395,12 @@ function getWaveOrigin(t) {
 function sampleIckna(canvas) {
   const tw = canvas.width, th = canvas.height;
   const tctx = canvas.getContext('2d');
-  const spacing = 10;
+  const spacing = params.spacing || 10;
   const cols = Math.ceil(tw / spacing);
   const rows = Math.ceil(th / spacing);
   const list = [];
+  const szMin = params.sizeMin || 1.5;
+  const szMax = params.sizeMax || 7.5;
   for (let gy = 0; gy < rows; gy++) {
     for (let gx = 0; gx < cols; gx++) {
       const px = gx * spacing + spacing / 2;
@@ -2416,7 +2418,7 @@ function sampleIckna(canvas) {
           x: Math.cos(Math.random() * Math.PI * 2) * (500 + Math.random() * 1500),
           y: Math.sin(Math.random() * Math.PI * 2) * (500 + Math.random() * 1500),
           z: (Math.random() - 0.5) * 50,
-          size: 1.5 + Math.pow(Math.random(), 2) * 5.5,
+          size: szMin + Math.pow(Math.random(), 2) * (szMax - szMin),
           phase: Math.random() * Math.PI * 2
         });
       }
@@ -4009,10 +4011,12 @@ function initPlaybackMenu() {
 function sampleParticles() {
   const tw = logoCanvas.width, th = logoCanvas.height;
   const tctx = logoCanvas.getContext('2d');
-  const spacing = 10;
+  const spacing = PRESET.params.spacing || 10;
   const cols = Math.ceil(tw / spacing);
   const rows = Math.ceil(th / spacing);
   const list = [];
+  const szMin = PRESET.params.sizeMin || 1.5;
+  const szMax = PRESET.params.sizeMax || 7.5;
   for (let gy = 0; gy < rows; gy++) {
     for (let gx = 0; gx < cols; gx++) {
       const px = gx * spacing + spacing / 2;
@@ -4030,7 +4034,7 @@ function sampleParticles() {
           x: Math.cos(Math.random() * Math.PI * 2) * (500 + Math.random() * 1500),
           y: Math.sin(Math.random() * Math.PI * 2) * (500 + Math.random() * 1500),
           z: (Math.random() - 0.5) * 50,
-          size: 1.5 + Math.pow(Math.random(), 2) * 5.5,
+          size: szMin + Math.pow(Math.random(), 2) * (szMax - szMin),
           phase: Math.random() * Math.PI * 2
         });
       }

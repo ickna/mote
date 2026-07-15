@@ -715,13 +715,14 @@ function initPlaybackMenu() {
 // ── Particle sampling ────────────────────────────────────────
 function sampleParticles() {
   const tw = logoCanvas.width, th = logoCanvas.height, tctx = logoCanvas.getContext('2d');
+  const sp = PRESET.params.spacing || 10, szMin = PRESET.params.sizeMin || 1.5, szMax = PRESET.params.sizeMax || 7.5;
   const list = [];
-  for (let gy = 0; gy < Math.ceil(th/10); gy++) { for (let gx = 0; gx < Math.ceil(tw/10); gx++) {
-    const px = gx*10+5, py = gy*10+5;
+  for (let gy = 0; gy < Math.ceil(th/sp); gy++) { for (let gx = 0; gx < Math.ceil(tw/sp); gx++) {
+    const px = gx*sp+sp/2, py = gy*sp+sp/2;
     if (tctx.getImageData(Math.round(px), Math.round(py), 1, 1).data[3] > 30) {
       list.push({ tx: px+(Math.random()-0.5)*6, ty: py+(Math.random()-0.5)*6, tz: 0, edgeDist: 0, flame: 0, lightning: 0, sparkle: 0,
         x: Math.cos(Math.random()*Math.PI*2)*(500+Math.random()*1500), y: Math.sin(Math.random()*Math.PI*2)*(500+Math.random()*1500), z: (Math.random()-0.5)*50,
-        size: 1.5+Math.pow(Math.random(),2)*5.5, phase: Math.random()*Math.PI*2 });
+        size: szMin+Math.pow(Math.random(),2)*(szMax-szMin), phase: Math.random()*Math.PI*2 });
     }
   } }
   return list;
