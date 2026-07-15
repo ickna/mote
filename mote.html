@@ -2735,6 +2735,7 @@ function initUI() {
     dragCheck.addEventListener('change', () => {
       params.dragEnabled = dragCheck.checked;
       dragLabel.textContent = dragCheck.checked ? 'On' : 'Off';
+      if (window.setDragEnabled) window.setDragEnabled(dragCheck.checked);
     });
   }
 
@@ -4883,14 +4884,27 @@ async function boot() {
     }
     dragState.active = false;
   }
-  if (params.dragEnabled) {
-    window.addEventListener('mousedown', onPointerDown);
-    window.addEventListener('mousemove', onPointerMove);
-    window.addEventListener('mouseup', onPointerUp);
-    window.addEventListener('touchstart', onPointerDown, { passive: true });
-    window.addEventListener('touchmove', onPointerMove, { passive: true });
-    window.addEventListener('touchend', onPointerUp, { passive: true });
-  }
+  let dragListenersActive = false;
+  window.setDragEnabled = function(on) {
+    if (on && !dragListenersActive) {
+      window.addEventListener('mousedown', onPointerDown);
+      window.addEventListener('mousemove', onPointerMove);
+      window.addEventListener('mouseup', onPointerUp);
+      window.addEventListener('touchstart', onPointerDown, { passive: true });
+      window.addEventListener('touchmove', onPointerMove, { passive: true });
+      window.addEventListener('touchend', onPointerUp, { passive: true });
+      dragListenersActive = true;
+    } else if (!on && dragListenersActive) {
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('mousemove', onPointerMove);
+      window.removeEventListener('mouseup', onPointerUp);
+      window.removeEventListener('touchstart', onPointerDown);
+      window.removeEventListener('touchmove', onPointerMove);
+      window.removeEventListener('touchend', onPointerUp);
+      dragListenersActive = false;
+    }
+  };
+  if (params.dragEnabled) setDragEnabled(true);
 
   // Keyboard controls
   document.addEventListener('keydown', e => { keys[e.key] = true; if (e.key === '/') yRotEnabled = !yRotEnabled; if (e.key === '=' || e.key === '+') { const idx = Math.floor(Math.random() * edgeParticles.length); if (edgeParticles[idx]) { edgeParticles[idx].flame = -2.0; params.flameEnabled = true; } } if (e.key === '\\' || e.key === '|') { const idx = Math.floor(Math.random() * edgeParticles.length); if (edgeParticles[idx]) { edgeParticles[idx].flame = 2.0; params.flameEnabled = true; } } if (e.key === '-' || e.key === '_') { params.lightningEnabled = true; spawnChainLightning(); } if (e.key === '0' || e.key === ')') { params.lightningEnabled = true; spawnGuidedBolt(); } });
