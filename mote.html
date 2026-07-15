@@ -1754,9 +1754,13 @@ function applyPostProcessing(p) {
 }
 
 function frame(t) {
+  // Pipeline: Setup → Clear → Nebula → Starfield → Trail → Project → Core → Layers → Lightning → Transition → Playlist → Post
+
   try {
     if (!particles.length || !logoCanvas) { animId = requestAnimationFrame(frame); return; }
     const p = animEvaluate(params, params.anim, t - animStartTime);
+
+    // ── Step 0: Setup (rotation, audio, throttling, logo bounds) ──
 
     // Reset CSS filter from previous frame's color grade
     canvas.style.filter = '';
@@ -2324,6 +2328,7 @@ function frame(t) {
 
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
+    // ── Step 9: Post-processing (bloom, vignette, grade) ──
     applyPostProcessing(p);
   } catch (e) {
     console.error('Mote frame error:', e);
@@ -4681,6 +4686,7 @@ function frame(t) {
 
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
+    // ── Step 9: Post-processing (bloom, vignette, grade) ──
     applyPostProcessing(p);
   } catch (e) {
     console.error('Mote frame error:', e);
