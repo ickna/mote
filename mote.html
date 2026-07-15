@@ -297,6 +297,30 @@ canvas{display:block;width:100%;height:100%}
                   <button class="fx-btn" id="btn-fx-fire">🔥 Fire</button>
                   <button class="fx-btn" id="btn-fx-lightning">⚡ Bolt</button>
                 </div>
+                <div class="panel-section">
+                  <h3>Post-Processing</h3>
+                  <div class="param-row"><label>Bloom</label>
+                    <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                      <input type="checkbox" id="p-bloom" style="accent-color:var(--accent)">
+                      <span style="font-size:11px;opacity:.5" id="v-bloom">Off</span>
+                    </label>
+                  </div>
+                  <div class="param-row"><label>Bloom Intensity</label><input type="range" id="p-bloomIntensity" min="0" max="1" step="0.05"><span class="param-val" id="v-bloomIntensity"></span></div>
+                  <div class="param-row"><label>Vignette</label>
+                    <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                      <input type="checkbox" id="p-vignette" style="accent-color:var(--accent)">
+                      <span style="font-size:11px;opacity:.5" id="v-vignette">Off</span>
+                    </label>
+                  </div>
+                  <div class="param-row"><label>Color Grade</label>
+                    <select id="p-colorGrade" style="flex:1;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:11px;font-family:inherit">
+                      <option value="none">None</option>
+                      <option value="warm">Warm</option>
+                      <option value="cool">Cool</option>
+                      <option value="dramatic">Dramatic</option>
+                    </select>
+                  </div>
+                </div>
                 <div class="param-row"><label>Transition</label><input type="range" id="p-transitionDuration" min="0" max="3000" step="100"><span class="param-val" id="v-transitionDuration"></span></div>
               </div>
 
@@ -455,7 +479,12 @@ const DEFAULT_PARAMS = {
   transitionDuration: 800,
   lineThreshold: 60,
   // Animation
-  anim: {}
+  anim: {},
+  // Post-processing
+  bloom: false,
+  bloomIntensity: 0.4,
+  vignette: false,
+  colorGrade: 'none'
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -1441,10 +1470,61 @@ function drawStars() {
 // Unified Frame — single rendering pipeline
 // ═══════════════════════════════════════════════════════════════
 
+let ppCache = null;
+
+function applyPostProcessing(p) {
+  // Bloom: half-res blur + additive composite
+  if (p.bloom && p.bloomIntensity > 0 && typeof ctx.filter !== 'undefined') {
+    const hw = Math.ceil(W / 2), hh = Math.ceil(H / 2);
+    if (!ppCache || ppCache.width !== hw || ppCache.height !== hh) {
+      ppCache = document.createElement('canvas');
+      ppCache.width = hw;
+      ppCache.height = hh;
+    }
+    const pc = ppCache.getContext('2d');
+    pc.clearRect(0, 0, hw, hh);
+    pc.drawImage(canvas, 0, 0, W, H, 0, 0, hw, hh);
+    pc.filter = 'blur(' + Math.round(4 + p.bloomIntensity * 10) + 'px)';
+    pc.globalCompositeOperation = 'source-over';
+    pc.drawImage(ppCache, 0, 0);
+    pc.filter = 'none';
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = p.bloomIntensity * 0.6;
+    ctx.drawImage(ppCache, 0, 0, hw, hh, 0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+  }
+
+  // Vignette: radial gradient overlay
+  if (p.vignette) {
+    const cx = W / 2, cy = H / 2, r = Math.max(W, H) * 0.75;
+    const grad = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.45)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Color grade: CSS filter on canvas element (reset each frame)
+  if (p.colorGrade && p.colorGrade !== 'none') {
+    switch (p.colorGrade) {
+      case 'warm': canvas.style.filter = 'brightness(1.05) saturate(1.2) sepia(0.15)'; break;
+      case 'cool': canvas.style.filter = 'brightness(1.05) saturate(0.8) hue-rotate(-15deg)'; break;
+      case 'dramatic': canvas.style.filter = 'brightness(1.1) contrast(1.2) saturate(1.3)'; break;
+      default: canvas.style.filter = '';
+    }
+  } else {
+    canvas.style.filter = '';
+  }
+}
+
 function frame(t) {
   try {
     if (!particles.length || !logoCanvas) { animId = requestAnimationFrame(frame); return; }
     const p = animEvaluate(params, params.anim, t - animStartTime);
+
+    // Reset CSS filter from previous frame's color grade
+    canvas.style.filter = '';
 
     // Logo bounds
     const logoAspect = logoCanvas.width / logoCanvas.height;
@@ -1911,6 +1991,7 @@ function frame(t) {
   } catch (e) {
     console.error('Mote frame error:', e);
   }
+  applyPostProcessing(p);
   animId = requestAnimationFrame(frame);
 }
 
@@ -2298,6 +2379,40 @@ function initUI() {
     });
   }
 
+  // Post-processing controls
+  const cbPP = (id, key) => {
+    const c = document.getElementById('p-' + id);
+    const l = document.getElementById('v-' + id);
+    if (c) {
+      c.checked = params[key];
+      if (l) l.textContent = params[key] ? 'On' : 'Off';
+      c.addEventListener('change', () => {
+        params[key] = c.checked;
+        if (l) l.textContent = c.checked ? 'On' : 'Off';
+      });
+    }
+  };
+  cbPP('bloom', 'bloom');
+  cbPP('vignette', 'vignette');
+
+  const bloomSlider = document.getElementById('p-bloomIntensity');
+  if (bloomSlider) {
+    bloomSlider.value = params.bloomIntensity;
+    document.getElementById('v-bloomIntensity').textContent = formatVal(params.bloomIntensity, 0.05);
+    bloomSlider.addEventListener('input', () => {
+      params.bloomIntensity = parseFloat(bloomSlider.value);
+      document.getElementById('v-bloomIntensity').textContent = formatVal(params.bloomIntensity, 0.05);
+    });
+  }
+
+  const gradeSelect = document.getElementById('p-colorGrade');
+  if (gradeSelect) {
+    gradeSelect.value = params.colorGrade;
+    gradeSelect.addEventListener('change', () => {
+      params.colorGrade = gradeSelect.value;
+    });
+  }
+
   // Color mode select
   const colorModeSelect = document.getElementById('p-colorMode');
   if (colorModeSelect) {
@@ -2638,6 +2753,13 @@ function updateUI() {
   cb('p-starfieldEnabled', 'starfieldEnabled');
   cb('p-flameEnabled', 'flameEnabled');
   cb('p-lightningEnabled', 'lightningEnabled');
+  // Post-processing
+  cb('p-bloom', 'bloom');
+  cb('p-vignette', 'vignette');
+  const bloomSlider = document.getElementById('p-bloomIntensity');
+  if (bloomSlider) { bloomSlider.value = params.bloomIntensity; document.getElementById('v-bloomIntensity').textContent = formatVal(params.bloomIntensity, 0.05); }
+  const gradeSelect = document.getElementById('p-colorGrade');
+  if (gradeSelect) gradeSelect.value = params.colorGrade;
   const color2Input = document.getElementById('p-colorSecondary');
   const color2Val = document.getElementById('v-colorSecondary');
   if (color2Input) { color2Input.value = params.colorSecondary; color2Val.textContent = params.colorSecondary; }

@@ -220,10 +220,11 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 **Goal:** GPU-based bloom, color grading, and vignette for broadcast-ready polish.
 
 - [ ] Offscreen renderCanvas at 0.5× for performance
-- [ ] Bloom: additive blend with blur filter
-- [ ] Vignette: radial gradient overlay
-- [ ] Color grade presets
-- [ ] `bloom`, `vignette`, `colorGrade` params serialized in presets
+- [x] Bloom: additive blend with blur filter
+- [x] Vignette: radial gradient overlay
+- [x] Color grade presets
+- [x] `bloom`, `vignette`, `colorGrade` params serialized in presets
+- [ ] CLI/Export: include post-processing engine
 
 ## Phase 3.8 — Audio Reactivity
 
