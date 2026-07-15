@@ -197,11 +197,12 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Parameter values can be animated over time — scale ramps up, rotation speeds vary, colors shift — using keyframe curves embedded in presets.
 
-- [ ] `anim` key in preset JSON: `{ "anim": { "scale": { "keyframes": [[0, 0.3], [3000, 1.0]], "loop": true } } }`
-- [ ] `Animator` module: linear lerp between keyframes, configurable easing
-- [ ] `runtimeParams` object shadows `params` during render loop
-- [ ] Animation tab in editor: keyframe editor with timeline
-- [ ] Serialize `anim` block into `getPreset()`
+- [x] `anim` key in preset JSON: `{ "anim": { "scale": { "keyframes": [[0, 0.3], [3000, 1.0]], "loop": true } } }`
+- [x] `Animator` module: linear lerp between keyframes, configurable easing
+- [x] `runtimeParams` object shadows `params` during render loop
+- [x] Animation tab in editor: keyframe editor with timeline
+- [x] Serialize `anim` block into `getPreset()`
+- [x] Export playback HTML — include Animator in embedded engine
 
 ## Phase 3.6 — Remote Control API
 

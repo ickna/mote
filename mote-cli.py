@@ -229,6 +229,7 @@ let yawAngle = 0, pitchAngle = 0, yawSpd = 0, pitchSpd = 0;
 let yRotEnabled = false;
 const keys = {};
 let lightningQueue = [], lightningBolts = [], lightningPaths = [];
+let animStartTime = 0;
 
 // White glow texture — tinted at draw time via source-atop
 const glowTex = (() => {
@@ -290,6 +291,45 @@ function getParticleColor(pt, p, rgb1, rgb2) {
     default: return p.color;
   }
   return lerpRgb(rgb1, rgb2, t);
+}
+
+// ── Animator ──────────────────────────────────────────────────
+function lerpColor(c1, c2, tVal) {
+  var r1 = parseInt(c1.slice(1, 3), 16), g1 = parseInt(c1.slice(3, 5), 16), b1 = parseInt(c1.slice(5, 7), 16);
+  var r2 = parseInt(c2.slice(1, 3), 16), g2 = parseInt(c2.slice(3, 5), 16), b2 = parseInt(c2.slice(5, 7), 16);
+  var rt = Math.round(r1 + (r2 - r1) * tVal), gt = Math.round(g1 + (g2 - g1) * tVal), bt = Math.round(b1 + (b2 - b1) * tVal);
+  return '#' + rt.toString(16).padStart(2, '0') + gt.toString(16).padStart(2, '0') + bt.toString(16).padStart(2, '0');
+}
+function applyEasing(t, easing) {
+  switch (easing) {
+    case 'ease-in': return t * t;
+    case 'ease-out': return 1 - (1 - t) * (1 - t);
+    case 'ease-in-out': return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    default: return t;
+  }
+}
+function animEvaluate(baseParams, animDef, elapsed) {
+  if (!animDef || !Object.keys(animDef).length) return baseParams;
+  var rp = {}, key;
+  for (key in baseParams) rp[key] = baseParams[key];
+  for (key in animDef) {
+    var a = animDef[key];
+    if (!a.keyframes || a.keyframes.length < 2) continue;
+    var last = a.keyframes[a.keyframes.length - 1][0];
+    var et = a.loop ? elapsed % last : Math.min(elapsed, last);
+    var i = 0;
+    while (i < a.keyframes.length - 1 && a.keyframes[i + 1][0] < et) i++;
+    var t0 = a.keyframes[i][0], v0 = a.keyframes[i][1];
+    var t1 = a.keyframes[i + 1][0], v1 = a.keyframes[i + 1][1];
+    var raw = t1 > t0 ? Math.max(0, Math.min(1, (et - t0) / (t1 - t0))) : 0;
+    var tVal = applyEasing(raw, a.easing || 'linear');
+    if (typeof v0 === 'string' && v0[0] === '#') {
+      rp[key] = lerpColor(v0, v1, tVal);
+    } else {
+      rp[key] = v0 + (v1 - v0) * tVal;
+    }
+  }
+  return rp;
 }
 
 // ── Render Modes ─────────────────────────────────────────────
@@ -725,7 +765,7 @@ function computeEdgeDist(svgStr, svgW, svgH, doc) {
 function frame(t) {
   try {
     if (!particles.length || !logoCanvas) { animId = requestAnimationFrame(frame); return; }
-    const p = PRESET.params;
+    const p = animEvaluate(PRESET.params, PRESET.params.anim, t - animStartTime);
     const LOGO_COLOR = p.color || '#e03030';
 
     // Logo bounds
@@ -1100,7 +1140,7 @@ function frame(t) {
   animId = requestAnimationFrame(frame);
 }
 
-function startLoop() { document.getElementById('loading').classList.add('hidden'); setTimeout(() => document.getElementById('loading').classList.add('hidden'), 3000); initPlaybackMenu(); setTimeout(() => { yRotEnabled = true; }, 5000); frame(performance.now()); }
+function startLoop() { document.getElementById('loading').classList.add('hidden'); setTimeout(() => document.getElementById('loading').classList.add('hidden'), 3000); initPlaybackMenu(); setTimeout(() => { yRotEnabled = true; }, 5000); animStartTime = performance.now(); frame(animStartTime); }
 
 // ── Keyboard controls ────────────────────────────────────────
 document.addEventListener('keydown', e => { keys[e.key] = true; if (e.key === '/') yRotEnabled = !yRotEnabled; if (e.key === '=' || e.key === '+') { const idx = Math.floor(Math.random()*edgeParticles.length); if (edgeParticles[idx]) { edgeParticles[idx].flame = -2.0; PRESET.params.flameEnabled = true; } } if (e.key === '\\\\' || e.key === '|') { const idx = Math.floor(Math.random()*edgeParticles.length); if (edgeParticles[idx]) { edgeParticles[idx].flame = 2.0; PRESET.params.flameEnabled = true; } } if (e.key === '-' || e.key === '_') { PRESET.params.lightningEnabled = true; spawnChainLightning(); } if (e.key === '0' || e.key === ')') { PRESET.params.lightningEnabled = true; spawnGuidedBolt(); } });
