@@ -224,7 +224,7 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 - [x] Vignette: radial gradient overlay
 - [x] Color grade presets
 - [x] `bloom`, `vignette`, `colorGrade` params serialized in presets
-- [ ] CLI/Export: include post-processing engine
+- [x] CLI/Export: include post-processing engine
 
 ## Phase 3.8 — Audio Reactivity
 

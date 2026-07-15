@@ -58,7 +58,11 @@ DEFAULT_PARAMS = {
     "lightningEnabled": False,
     "edgeLineAlpha": 0.1,
     "transitionDuration": 800,
-    "lineThreshold": 60
+    "lineThreshold": 60,
+    "bloom": False,
+    "bloomIntensity": 0.4,
+    "vignette": False,
+    "colorGrade": "none"
 }
 
 
@@ -230,6 +234,7 @@ let yRotEnabled = false;
 const keys = {};
 let lightningQueue = [], lightningBolts = [], lightningPaths = [];
 let animStartTime = 0;
+let ppCache = null;
 
 // White glow texture — tinted at draw time via source-atop
 const glowTex = (() => {
@@ -760,6 +765,55 @@ function computeEdgeDist(svgStr, svgW, svgH, doc) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Post-processing — bloom, vignette, color grade
+// ═══════════════════════════════════════════════════════════════
+function applyPostProcessing(p) {
+  // Bloom: half-res blur + additive composite
+  if (p.bloom && p.bloomIntensity > 0 && typeof ctx.filter !== 'undefined') {
+    const hw = Math.ceil(W / 2), hh = Math.ceil(H / 2);
+    if (!ppCache || ppCache.width !== hw || ppCache.height !== hh) {
+      ppCache = document.createElement('canvas');
+      ppCache.width = hw;
+      ppCache.height = hh;
+    }
+    const pc = ppCache.getContext('2d');
+    pc.clearRect(0, 0, hw, hh);
+    pc.drawImage(canvas, 0, 0, W, H, 0, 0, hw, hh);
+    pc.filter = 'blur(' + Math.round(4 + p.bloomIntensity * 10) + 'px)';
+    pc.globalCompositeOperation = 'source-over';
+    pc.drawImage(ppCache, 0, 0);
+    pc.filter = 'none';
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = p.bloomIntensity * 0.6;
+    ctx.drawImage(ppCache, 0, 0, hw, hh, 0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+  }
+
+  // Vignette: radial gradient overlay
+  if (p.vignette) {
+    const vx = W / 2, vy = H / 2, vr = Math.max(W, H) * 0.75;
+    const grad = ctx.createRadialGradient(vx, vy, vr * 0.3, vx, vy, vr);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.45)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Color grade: CSS filter on canvas element (reset each frame)
+  if (p.colorGrade && p.colorGrade !== 'none') {
+    switch (p.colorGrade) {
+      case 'warm': canvas.style.filter = 'brightness(1.05) saturate(1.2) sepia(0.15)'; break;
+      case 'cool': canvas.style.filter = 'brightness(1.05) saturate(0.8) hue-rotate(-15deg)'; break;
+      case 'dramatic': canvas.style.filter = 'brightness(1.1) contrast(1.2) saturate(1.3)'; break;
+      default: canvas.style.filter = '';
+    }
+  } else {
+    canvas.style.filter = '';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Unified Frame — single rendering pipeline
 // ═══════════════════════════════════════════════════════════════
 function frame(t) {
@@ -767,6 +821,9 @@ function frame(t) {
     if (!particles.length || !logoCanvas) { animId = requestAnimationFrame(frame); return; }
     const p = animEvaluate(PRESET.params, PRESET.params.anim, t - animStartTime);
     const LOGO_COLOR = p.color || '#e03030';
+
+    // Reset CSS filter from previous frame's color grade
+    canvas.style.filter = '';
 
     // Logo bounds
     const logoAspect = logoCanvas.width / logoCanvas.height;
@@ -1137,6 +1194,7 @@ function frame(t) {
   } catch (e) {
     console.error('Mote frame error:', e);
   }
+  applyPostProcessing(p);
   animId = requestAnimationFrame(frame);
 }
 
