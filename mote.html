@@ -459,6 +459,8 @@ canvas{display:block;width:100%;height:100%}
       <button class="panel-toggle" id="panel-toggle" title="Collapse">◀</button>
 </div>
 <script>
+/** Mote — SVG-to-particle engine. Built 2026-07-15 */
+(function() {
 // ═══════════════════════════════════════════════════════════════
 // Mote — SVG-to-particle engine
 // ═══════════════════════════════════════════════════════════════
@@ -5060,6 +5062,32 @@ async function boot() {
 }
 
 boot();
+// ── Public API (accessible via window.Mote) ─────────────────
+window.Mote = {
+  params: params,
+  particles: particles,
+  edgeParticles: edgeParticles,
+  frame: frame,
+  loadPreset: loadPreset,
+  getPreset: getPreset,
+  triggerAction: triggerAction,
+  applyParams: applyParams,
+  resetParticles: resetParticles,
+  engine: {
+    animEvaluate: typeof animEvaluate !== "undefined" ? animEvaluate : null,
+    applyPostProcessing: typeof applyPostProcessing !== "undefined" ? applyPostProcessing : null,
+    getFlameColor: typeof getFlameColor !== "undefined" ? getFlameColor : null,
+    updateFlame: typeof updateFlame !== "undefined" ? updateFlame : null,
+    updateLightning: typeof updateLightning !== "undefined" ? updateLightning : null,
+    spawnChainLightning: typeof spawnChainLightning !== "undefined" ? spawnChainLightning : null,
+    spawnGuidedBolt: typeof spawnGuidedBolt !== "undefined" ? spawnGuidedBolt : null,
+    renderNebula: typeof renderNebula !== "undefined" ? renderNebula : null,
+  },
+  audio: typeof AudioReactivity !== "undefined" ? AudioReactivity : null,
+  noise: typeof simplex !== "undefined" ? simplex : null,
+};
+})();
+
 </script>
 </body>
 </html>
