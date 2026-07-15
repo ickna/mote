@@ -252,10 +252,10 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Load JPEG/PNG images in addition to SVGs. Sample particles from image alpha or luminance.
 
-- [ ] File input accepting `.png`, `.jpg`, `.jpeg`
-- [ ] `sourceType: 'svg' | 'image'` in preset, store image as base64 data URI
-- [ ] CLI `--image` flag for preset generation from raster images
-- [ ] Luminance threshold for opaque images
+- [x] File input accepting `.png`, `.jpg`, `.jpeg`
+- [x] `sourceType: 'svg' | 'image'` in preset, store image as base64 data URI
+- [x] CLI `--image` flag for preset generation from raster images
+- [x] Luminance threshold for opaque images
 
 ## Phase 3.11 — CasparCG Producer Integrations
 

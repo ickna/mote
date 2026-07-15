@@ -131,20 +131,31 @@ def sample_particles(png_data, spacing, params):
     return particles
 
 
-def generate_preset(svg_path, output_path, params_override=None):
-    """Generate a Mote preset JSON file from an SVG."""
+def generate_preset(svg_path, output_path, params_override=None, is_image=False):
+    """Generate a Mote preset JSON file from an SVG or image."""
     params = dict(DEFAULT_PARAMS)
     if params_override:
         params.update(params_override)
 
-    svg_name = os.path.splitext(os.path.basename(svg_path))[0]
+    name = os.path.splitext(os.path.basename(svg_path))[0]
 
-    with open(svg_path, 'r') as f:
-        svg_content = f.read()
+    if is_image:
+        import base64 as b64
+        with open(svg_path, 'rb') as f:
+            img_data = f.read()
+        ext = os.path.splitext(svg_path)[1].lower()
+        mime = 'image/png' if ext == '.png' else 'image/jpeg'
+        svg_content = f"data:{mime};base64,{b64.b64encode(img_data).decode('ascii')}"
+        source_type = 'image'
+    else:
+        with open(svg_path, 'r') as f:
+            svg_content = f.read()
+        source_type = 'svg'
 
     preset = {
-        "name": svg_name,
-        "version": 1,
+        "name": name,
+        "version": 2,
+        "sourceType": source_type,
         "svg": svg_content,
         "params": params
     }
@@ -153,8 +164,9 @@ def generate_preset(svg_path, output_path, params_override=None):
         json.dump(preset, f, indent=2)
 
     print(f"Preset saved to {output_path}")
-    print(f"  Name: {svg_name}")
-    print(f"  SVG: {os.path.getsize(svg_path)} bytes")
+    print(f"  Name: {name}")
+    print(f"  Type: {source_type}")
+    print(f"  Size: {os.path.getsize(svg_path)} bytes")
     print(f"  Params: {len(params)} parameters")
 
 
@@ -1241,9 +1253,10 @@ def main():
 
     # preset command
     preset_p = sub.add_parser('preset', help='Generate a preset JSON from an SVG file')
-    preset_p.add_argument('--svg', required=True, help='Path to SVG file')
+    preset_p.add_argument('--svg', required=True, help='Path to SVG or image file')
     preset_p.add_argument('--output', '-o', default='preset.json', help='Output JSON file path')
     preset_p.add_argument('--params', '-p', default=None, help='JSON string of params to override')
+    preset_p.add_argument('--image', action='store_true', help='Treat input as image file (PNG/JPG)')
 
     # export command
     export_p = sub.add_parser('export', help='Export a self-contained playback HTML from a preset')
@@ -1256,7 +1269,7 @@ def main():
         params_override = None
         if args.params:
             params_override = json.loads(args.params)
-        generate_preset(args.svg, args.output, params_override)
+        generate_preset(args.svg, args.output, params_override, is_image=args.image)
 
     elif args.command == 'export':
         export_playback(args.preset, args.output)
