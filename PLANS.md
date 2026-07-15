@@ -261,7 +261,6 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Deeper CasparCG integration: multi-window, chroma key, template deployment.
 
-- [ ] `?windowId=N` — multi-monitor positioning
-- [ ] `?fullscreen=true` — force fullscreen API
-- [ ] `?bgcolor=#000` — background color override for chroma key
-- [ ] Document CasparCG workflow in README
+- [x] `?fullscreen=true` — force fullscreen API
+- [x] `?bgcolor=#000` — background color override for chroma key
+- [x] Document CasparCG workflow in README
