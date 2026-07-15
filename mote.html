@@ -1839,6 +1839,22 @@ function frame(t) {
     // ── Step 1: Clear ──
     ctx.clearRect(0, 0, W, H);
 
+    // ── Step 1.5: Nebula background ──
+    if (p.nebulaEnabled) {
+      renderNebula();
+      if (nebulaCache) {
+        // Render nebula texture centered and scaled to logo bounds
+        const naspect = nebulaCache.width / nebulaCache.height;
+        let nw, nh;
+        if (W / H > naspect) { nh = Math.min(H * 0.9, sc); nw = nh * naspect; }
+        else { nw = Math.min(W * 0.9, sc); nh = nw / naspect; }
+        const nx = (W - nw) / 2, ny = (H - nh) / 2;
+        ctx.globalAlpha = 0.3;
+        ctx.drawImage(nebulaCache, nx, ny, nw, nh);
+        ctx.globalAlpha = 1;
+      }
+    }
+
     // ── Step 2: Starfield ──
     if (p.starfieldEnabled && stars.length) drawStars();
 
