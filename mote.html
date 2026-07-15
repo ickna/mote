@@ -636,6 +636,7 @@ let playlist = [];
 let playlistIndex = 0;
 let playlistTimer = 0;
 let isPlaylistPlaying = false;
+let frameCount = 0;        // frame counter for throttling
 
 // ── URL mode ──────────────────────────────────────────────────
 const urlParams = new URLSearchParams(window.location.search);
@@ -1718,10 +1719,13 @@ function frame(t) {
     // Process held menu buttons (auto-repeat)
     processButtons();
 
-    // Updates
-    updateSparkles();
-    updateFlame();
-    updateLightning();
+    // Throttled updates: expensive subsystems run every N frames
+    frameCount++;
+    const every2 = frameCount % 2 === 0;
+    const every3 = frameCount % 3 === 0;
+    updateSparkles();                         // cheap, always run
+    if (every2) { updateFlame(); updateLightning(); }  // expensive neighbor/queue ops
+    else { updateLightningDecay(); }                    // cheap: just decay, no queue
 
     // ── Step 1: Clear ──
     ctx.clearRect(0, 0, W, H);
@@ -1810,41 +1814,60 @@ function frame(t) {
 
     // ── Step 5: Core rendering ──
     if (isIcknaRender) {
-      // Edge-to-main connection lines (flame-aware, always on if edgeLineAlpha > 0)
+      // Edge-to-main connection lines (spatial grid optimization)
       if (p.edgeLineAlpha > 0 && edgeParticles.length) {
         ctx.lineWidth = 2.0;
         const lineThreshold = 180;
-        const getParticleColor = (flame) => {
-          if (Math.abs(flame) > 0.01) { const c = getFlameColor(flame); return { r: c.r, g: c.g, b: c.b }; }
-          return { r: 224, g: 48, b: 48 };
-        };
-        const edgeScreen = [];
+        const cellSize = lineThreshold;
+        const grid = new Map();
+
+        // Build spatial grid of projected particles
+        for (let i = 0; i < projected.length; i++) {
+          const pp = projected[i];
+          const cx = Math.floor(pp.px / cellSize), cy = Math.floor(pp.py / cellSize);
+          const key = cx + ',' + cy;
+          if (!grid.has(key)) grid.set(key, []);
+          grid.get(key).push(i);
+        }
+
+        // Query grid for each edge particle (only check adjacent cells)
         for (const ep of edgeParticles) {
           const rotated = applyRotYawPitch({x: ep.tx - lcx, y: ep.ty - lcy, z: ep.tz}, effectiveYaw, pitch);
           const zOffset = rotated.z + 200;
           const ps = FOCAL / (FOCAL + zOffset);
-          edgeScreen.push({ sx: rotated.x * ps * baseS + cx, sy: rotated.y * ps * baseS + cy, color: getParticleColor(ep.flame) });
-        }
-        for (let ei = 0; ei < edgeScreen.length; ei++) {
-          const es = edgeScreen[ei];
-          if (es.sx < -10 || es.sx > W + 10 || es.sy < -10 || es.sy > H + 10) continue;
-          const mainNeighbors = [];
-          for (const pp of projected) {
-            const dx = es.sx - pp.px, dy = es.sy - pp.py;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < lineThreshold) mainNeighbors.push({ x: pp.px, y: pp.py, dist, color: getParticleColor(pp.pt ? pp.pt.flame : 0) });
+          const esx = rotated.x * ps * baseS + cx;
+          const esy = rotated.y * ps * baseS + cy;
+          if (esx < -10 || esx > W + 10 || esy < -10 || esy > H + 10) continue;
+
+          const ecx = Math.floor(esx / cellSize), ecy = Math.floor(esy / cellSize);
+          const neighbors = [];
+          const lineThreshold2 = lineThreshold * lineThreshold;
+
+          // Check 9 adjacent cells
+          for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+              const cell = grid.get((ecx + dx) + ',' + (ecy + dy));
+              if (!cell) continue;
+              for (const pi of cell) {
+                const pp = projected[pi];
+                const distX = esx - pp.px, distY = esy - pp.py;
+                const dist2 = distX * distX + distY * distY;
+                if (dist2 < lineThreshold2) {
+                  neighbors.push({ x: pp.px, y: pp.py, dist: Math.sqrt(dist2), color: pp.pt ? (Math.abs(pp.pt.flame) > 0.01 ? getFlameColor(pp.pt.flame) : { r: 224, g: 48, b: 48 }) : { r: 224, g: 48, b: 48 } });
+                }
+              }
+            }
           }
-          mainNeighbors.sort((a, b) => a.dist - b.dist);
-          const mainLimit = Math.min(6, mainNeighbors.length);
+
+          neighbors.sort(function(a, b) { return a.dist - b.dist; });
+          const eColor = Math.abs(ep.flame) > 0.01 ? getFlameColor(ep.flame) : { r: 224, g: 48, b: 48 };
+          const mainLimit = Math.min(3, neighbors.length);
           for (let k = 0; k < mainLimit; k++) {
-            const n = mainNeighbors[k];
-            const avgR = (es.color.r + n.color.r) >> 1;
-            const avgG = (es.color.g + n.color.g) >> 1;
-            const avgB = (es.color.b + n.color.b) >> 1;
+            const n = neighbors[k];
             ctx.globalAlpha = (1 - n.dist / lineThreshold) * p.edgeLineAlpha;
-            ctx.strokeStyle = 'rgb(' + avgR + ',' + avgG + ',' + avgB + ')';
+            ctx.strokeStyle = 'rgb(' + ((eColor.r + n.color.r) >> 1) + ',' + ((eColor.g + n.color.g) >> 1) + ',' + ((eColor.b + n.color.b) >> 1) + ')';
             ctx.beginPath();
-            ctx.moveTo(es.sx, es.sy);
+            ctx.moveTo(esx, esy);
             ctx.lineTo(n.x, n.y);
             ctx.stroke();
           }
