@@ -348,6 +348,12 @@ canvas{display:block;width:100%;height:100%}
                     <div class="audio-meter-bar" id="audio-meter-treble"></div>
                   </div>
                 </div>
+                <div class="param-row"><label>Drag Rotate</label>
+                  <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="checkbox" id="p-dragEnabled" style="accent-color:var(--accent)">
+                    <span style="font-size:11px;opacity:.5" id="v-dragEnabled">Off</span>
+                  </label>
+                </div>
                 <div class="param-row"><label>Transition</label><input type="range" id="p-transitionDuration" min="0" max="3000" step="100"><span class="param-val" id="v-transitionDuration"></span></div>
               </div>
 
@@ -515,7 +521,9 @@ const DEFAULT_PARAMS = {
   // Audio reactivity
   audioEnabled: false,
   audioSource: 'mic',
-  audioImpact: 0.5
+  audioImpact: 0.5,
+  // Interaction
+  dragEnabled: false
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -2716,6 +2724,18 @@ function initUI() {
     });
   }
 
+  // Drag rotation toggle
+  const dragCheck = document.getElementById('p-dragEnabled');
+  const dragLabel = document.getElementById('v-dragEnabled');
+  if (dragCheck) {
+    dragCheck.checked = params.dragEnabled;
+    dragLabel.textContent = params.dragEnabled ? 'On' : 'Off';
+    dragCheck.addEventListener('change', () => {
+      params.dragEnabled = dragCheck.checked;
+      dragLabel.textContent = dragCheck.checked ? 'On' : 'Off';
+    });
+  }
+
   // Color mode select
   const colorModeSelect = document.getElementById('p-colorMode');
   if (colorModeSelect) {
@@ -3043,6 +3063,8 @@ function updateUI() {
   if (gradeSelect) gradeSelect.value = params.colorGrade;
   // Audio
   cb('p-audioEnabled', 'audioEnabled');
+  // Drag
+  cb('p-dragEnabled', 'dragEnabled');
   const audioSourceSelect = document.getElementById('p-audioSource');
   if (audioSourceSelect) audioSourceSelect.value = params.audioSource;
   const audioImpactSlider = document.getElementById('p-audioImpact');
@@ -4857,12 +4879,14 @@ async function boot() {
     }
     dragState.active = false;
   }
-  window.addEventListener('mousedown', onPointerDown);
-  window.addEventListener('mousemove', onPointerMove);
-  window.addEventListener('mouseup', onPointerUp);
-  window.addEventListener('touchstart', onPointerDown, { passive: true });
-  window.addEventListener('touchmove', onPointerMove, { passive: true });
-  window.addEventListener('touchend', onPointerUp, { passive: true });
+  if (params.dragEnabled) {
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+    window.addEventListener('touchstart', onPointerDown, { passive: true });
+    window.addEventListener('touchmove', onPointerMove, { passive: true });
+    window.addEventListener('touchend', onPointerUp, { passive: true });
+  }
 
   // Keyboard controls
   document.addEventListener('keydown', e => { keys[e.key] = true; if (e.key === '/') yRotEnabled = !yRotEnabled; if (e.key === '=' || e.key === '+') { const idx = Math.floor(Math.random() * edgeParticles.length); if (edgeParticles[idx]) { edgeParticles[idx].flame = -2.0; params.flameEnabled = true; } } if (e.key === '\\' || e.key === '|') { const idx = Math.floor(Math.random() * edgeParticles.length); if (edgeParticles[idx]) { edgeParticles[idx].flame = 2.0; params.flameEnabled = true; } } if (e.key === '-' || e.key === '_') { params.lightningEnabled = true; spawnChainLightning(); } if (e.key === '0' || e.key === ')') { params.lightningEnabled = true; spawnGuidedBolt(); } });
