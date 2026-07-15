@@ -666,7 +666,9 @@ const AudioReactivity = {
     if (this.initialized) return true;
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    } catch (e) { return false; }
+      // Resume suspended context (browser autoplay policy)
+      if (this.ctx.state === 'suspended') await this.ctx.resume();
+    } catch (e) { console.warn('[mote] AudioContext failed:', e.message); return false; }
 
     try {
       if (sourceType === 'mic') {
@@ -688,13 +690,15 @@ const AudioReactivity = {
         }
       }
     } catch (e) {
+      console.warn('[mote] audio source failed:', e.message);
       return false;
     }
 
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = this.fftSize;
     this.source.connect(this.analyser);
-    this.analyser.connect(this.ctx.destination);
+    // Only connect to speakers for element sources, not mic (prevents feedback)
+    if (sourceType !== 'mic') this.analyser.connect(this.ctx.destination);
     this.initialized = true;
     return true;
   },
@@ -2700,7 +2704,7 @@ function initUI() {
           params.audioEnabled = false;
           audioCheck.checked = false;
           audioLabel.textContent = 'Off';
-          console.warn('[mote] audio init failed');
+          alert('Audio init failed. Mic requires HTTPS or localhost.\nTry "Audio Element" source with an audio file instead.');
         }
       } else {
         AudioReactivity.suspend();
