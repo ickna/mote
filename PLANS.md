@@ -208,11 +208,12 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** CasparCG/automation control via WebSocket or OSC. Switch presets, adjust params, trigger effects.
 
-- [ ] `?ws=8080` param — connect to WebSocket server
-- [ ] Control message protocol: `{cmd: "preset"|"param"|"effect"|"play", ...}`
-- [ ] OSC message parsing for lighting console integration
-- [ ] `control-server.js` — standalone Node.js relay
-- [ ] Graceful degradation: no server = normal playback
+- [x] `?ws=8080` param — connect to WebSocket server
+- [x] Control message protocol: `{cmd: "preset"|"param"|"effect"|"play"|"stop", ...}`
+- [x] OSC message parsing for lighting console integration
+- [x] `control-server.js` — standalone Node.js relay (zero dependencies)
+- [x] Graceful degradation: no server = normal playback
+- [x] Connection indicator (green/red dot), auto-reconnect
 
 ## Phase 3.7 — Post-Processing / Bloom
 

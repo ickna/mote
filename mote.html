@@ -120,6 +120,10 @@ canvas{display:block;width:100%;height:100%}
 .param-row.disabled{opacity:.3;pointer-events:none}
 /* ── Animation tab ─────────────────────────────── */
 .anim-kf-list{max-height:200px;overflow-y:auto;margin-bottom:4px}
+/* ── WS indicator ──────────────────────────────── */
+#ws-indicator{position:fixed;top:12px;right:12px;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.1);z-index:70;transition:background .3s}
+#ws-indicator.connected{background:#00ff88;box-shadow:0 0 6px rgba(0,255,136,.5)}
+#ws-indicator.error{background:#ff4444}
 </style>
 </head>
 <body>
@@ -134,6 +138,7 @@ canvas{display:block;width:100%;height:100%}
 <div id="player-overlay">
   <div class="info">Mote <span style="color:var(--accent)">◆</span> <span id="player-preset-name"></span></div>
 </div>
+<div id="ws-indicator"></div>
 
 <!-- ── Playback hamburger menu ───────────────── -->
 <div id="pmenu">
@@ -568,6 +573,9 @@ const isPlayMode = urlParams.get('mode') === 'play';
 const presetParam = urlParams.get('preset') || '';
 const fpsLimit = parseInt(urlParams.get('fps')) || 0;
 const hideOverlay = urlParams.has('hideOverlay');
+const wsPort = parseInt(urlParams.get('ws')) || 0;
+let wsConnection = null;
+let wsConnected = false;
 let lastFrameTime = 0;
 
 // ── Canvas resize ─────────────────────────────────────────────
@@ -4161,6 +4169,76 @@ async function boot() {
     // Editor mode
     initUI();
     loadSVG(ICKNA_SVG);
+  }
+
+  // ── WebSocket remote control ──────────────────────────────────
+  if (wsPort > 0) {
+    const indicator = document.getElementById('ws-indicator');
+    function connectWS() {
+      const url = 'ws://localhost:' + wsPort;
+      wsConnection = new WebSocket(url);
+      wsConnection.onopen = function() {
+        wsConnected = true;
+        if (indicator) indicator.className = 'connected';
+        console.log('[mote] ws connected to ' + url);
+      };
+      wsConnection.onclose = function() {
+        wsConnected = false;
+        if (indicator) indicator.className = 'error';
+        console.log('[mote] ws disconnected, retrying in 3s...');
+        setTimeout(connectWS, 3000);
+      };
+      wsConnection.onerror = function() {
+        if (indicator) indicator.className = 'error';
+      };
+      wsConnection.onmessage = function(event) {
+        try {
+          const msg = JSON.parse(event.data);
+          handleWSCommand(msg);
+        } catch (e) {}
+      };
+    }
+
+    function handleWSCommand(msg) {
+      switch (msg.cmd) {
+        case 'preset':
+          if (msg.preset) {
+            loadPreset(msg.preset);
+          } else if (msg.name) {
+            // Try loading from localStorage presets, fall back to loading by name
+            const presets = getLocalPresets();
+            if (presets[msg.name]) {
+              loadPreset({ name: msg.name, svg: presets[msg.name].svg, params: presets[msg.name].params });
+            } else {
+              console.warn('[mote] unknown preset:', msg.name);
+            }
+          }
+          break;
+        case 'param':
+          if (msg.key && msg.value !== undefined) {
+            params[msg.key] = msg.value;
+            updateUI();
+          }
+          break;
+        case 'effect':
+          triggerAction(msg.type);
+          break;
+        case 'play':
+          if (playlist.length > 0) {
+            playlistIndex = Math.min(msg.index || 0, playlist.length - 1);
+            isPlaylistPlaying = true;
+            playlistTimer = performance.now();
+            const item = playlist[playlistIndex];
+            if (item) loadPreset(item);
+          }
+          break;
+        case 'stop':
+          isPlaylistPlaying = false;
+          break;
+      }
+    }
+
+    connectWS();
   }
 
     // Start self-healing render loop
