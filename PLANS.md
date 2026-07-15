@@ -230,12 +230,13 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Particles pulse, rotate, and color-shift in response to microphone/audio input.
 
-- [ ] `AudioReactivity` class with AnalyserNode
-- [ ] Bass/mid/treble extraction from FFT bins
-- [ ] `audioEnabled` toggle, `audioSource` selector, `audioImpact` slider
-- [ ] Param modulation: waveAmp × bass, yawSpeed × mid, glowBlur × treble
-- [ ] Beat detection for one-shot bursts
-- [ ] `?audio=mic` / `?audio=source.mp3` URL params
+- [x] `AudioReactivity` class with AnalyserNode
+- [x] Bass/mid/treble extraction from FFT bins
+- [x] `audioEnabled` toggle, `audioSource` selector, `audioImpact` slider
+- [x] Param modulation: waveAmp × bass, yawSpeed × mid, glowBlur × treble
+- [x] Beat detection for one-shot bursts (edge sparkle flash)
+- [x] `?audio=mic` / `?audio=source.mp3` URL params
+- [x] Audio meter visualization in editor panel
 
 ## Phase 3.9 — Multi-Layer / Composite Presets
 

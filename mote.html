@@ -124,6 +124,12 @@ canvas{display:block;width:100%;height:100%}
 #ws-indicator{position:fixed;top:12px;right:12px;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.1);z-index:70;transition:background .3s}
 #ws-indicator.connected{background:#00ff88;box-shadow:0 0 6px rgba(0,255,136,.5)}
 #ws-indicator.error{background:#ff4444}
+/* ── Audio meter ───────────────────────────────── */
+.audio-meter{display:flex;gap:2px;height:8px;margin-top:4px;opacity:.4}
+.audio-meter-bar{flex:1;background:var(--border);border-radius:2px;transition:height .05s,background .05s;height:4px;align-self:flex-end}
+#audio-meter-bass{background:var(--accent)}
+#audio-meter-mid{background:rgba(200,200,208,.6)}
+#audio-meter-treble{background:rgba(200,200,208,.4)}
 </style>
 </head>
 <body>
@@ -321,6 +327,27 @@ canvas{display:block;width:100%;height:100%}
                     </select>
                   </div>
                 </div>
+                <div class="panel-section">
+                  <h3>Audio Reactivity</h3>
+                  <div class="param-row"><label>Audio</label>
+                    <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                      <input type="checkbox" id="p-audioEnabled" style="accent-color:var(--accent)">
+                      <span style="font-size:11px;opacity:.5" id="v-audioEnabled">Off</span>
+                    </label>
+                  </div>
+                  <div class="param-row"><label>Source</label>
+                    <select id="p-audioSource" style="flex:1;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:11px;font-family:inherit">
+                      <option value="mic">Microphone</option>
+                      <option value="element">Audio Element</option>
+                    </select>
+                  </div>
+                  <div class="param-row"><label>Impact</label><input type="range" id="p-audioImpact" min="0" max="1" step="0.05"><span class="param-val" id="v-audioImpact"></span></div>
+                  <div class="audio-meter" id="audio-meter">
+                    <div class="audio-meter-bar" id="audio-meter-bass"></div>
+                    <div class="audio-meter-bar" id="audio-meter-mid"></div>
+                    <div class="audio-meter-bar" id="audio-meter-treble"></div>
+                  </div>
+                </div>
                 <div class="param-row"><label>Transition</label><input type="range" id="p-transitionDuration" min="0" max="3000" step="100"><span class="param-val" id="v-transitionDuration"></span></div>
               </div>
 
@@ -484,7 +511,11 @@ const DEFAULT_PARAMS = {
   bloom: false,
   bloomIntensity: 0.4,
   vignette: false,
-  colorGrade: 'none'
+  colorGrade: 'none',
+  // Audio reactivity
+  audioEnabled: false,
+  audioSource: 'mic',
+  audioImpact: 0.5
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -606,6 +637,104 @@ const wsPort = parseInt(urlParams.get('ws')) || 0;
 let wsConnection = null;
 let wsConnected = false;
 let lastFrameTime = 0;
+const audioParam = urlParams.get('audio') || '';
+
+// ── Audio Reactivity ──────────────────────────────────────────
+const AudioReactivity = {
+  ctx: null,
+  analyser: null,
+  source: null,
+  stream: null,
+  bass: 0, mid: 0, treble: 0, energy: 0,
+  bassPeak: false, lastBassPeak: 0,
+  fftSize: 256,
+  initialized: false,
+
+  async init(sourceType) {
+    if (this.initialized) return true;
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) { return false; }
+
+    try {
+      if (sourceType === 'mic') {
+        this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        this.source = this.ctx.createMediaStreamSource(this.stream);
+      } else {
+        // sourceType is an audio file URL or element selector
+        const el = document.querySelector(sourceType) || document.getElementById(sourceType);
+        if (!el) {
+          const audio = new Audio();
+          audio.src = sourceType;
+          audio.loop = true;
+          audio.crossOrigin = 'anonymous';
+          document.body.appendChild(audio);
+          this.source = this.ctx.createMediaElementSource(audio);
+          audio.play().catch(() => {});
+        } else {
+          this.source = this.ctx.createMediaElementSource(el);
+        }
+      }
+    } catch (e) {
+      return false;
+    }
+
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = this.fftSize;
+    this.source.connect(this.analyser);
+    this.analyser.connect(this.ctx.destination);
+    this.initialized = true;
+    return true;
+  },
+
+  update() {
+    if (!this.initialized || !this.analyser) return;
+    const len = this.analyser.frequencyBinCount;
+    const data = new Uint8Array(len);
+    this.analyser.getByteFrequencyData(data);
+
+    // Frequency bands (approximate with 256 fftSize, 44100 sample rate)
+    // bin width = 44100/256 ≈ 172 Hz per bin
+    // bass: bins 0-2  (0-516 Hz)
+    // mid:  bins 3-11 (516-2067 Hz)
+    // treble: bins 12-63 (2067-11025 Hz)
+    let bass = 0, mid = 0, treble = 0, total = 0;
+    for (let i = 0; i < 3 && i < len; i++) bass += data[i];
+    for (let i = 3; i < 12 && i < len; i++) mid += data[i];
+    for (let i = 12; i < len; i++) treble += data[i];
+    bass /= 3 * 255;
+    mid /= 9 * 255;
+    treble /= (len - 12) * 255;
+    for (let i = 0; i < len; i++) total += data[i];
+    this.bass = bass;
+    this.mid = mid;
+    this.treble = treble;
+    this.energy = total / (len * 255);
+
+    // Beat detection: bass spike above threshold
+    const now = performance.now();
+    if (bass > 0.6 && now - this.lastBassPeak > 200) {
+      this.bassPeak = true;
+      this.lastBassPeak = now;
+    } else {
+      this.bassPeak = false;
+    }
+  },
+
+  suspend() {
+    if (this.ctx && this.ctx.state === 'running') this.ctx.suspend();
+  },
+
+  resume() {
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+  },
+
+  stop() {
+    if (this.stream) this.stream.getTracks().forEach(t => t.stop());
+    if (this.ctx) this.ctx.close();
+    this.initialized = false;
+  }
+};
 
 // ── Canvas resize ─────────────────────────────────────────────
 function resize() {
@@ -1526,6 +1655,27 @@ function frame(t) {
     // Reset CSS filter from previous frame's color grade
     canvas.style.filter = '';
 
+    // Audio reactivity modulation
+    if (p.audioEnabled && AudioReactivity.initialized) {
+      AudioReactivity.update();
+      const ai = p.audioImpact;
+      p.waveAmp *= 1 + AudioReactivity.bass * ai * 2;
+      p.yawSpeed *= 1 + AudioReactivity.mid * ai;
+      p.glowBlur *= 1 + AudioReactivity.treble * ai * 3;
+      p.sizeScale *= 1 + AudioReactivity.energy * ai * 0.5;
+      if (AudioReactivity.bassPeak && ai > 0.3) {
+        const idx = Math.floor(Math.random() * edgeParticles.length);
+        if (edgeParticles[idx]) edgeParticles[idx].sparkle = 1.0;
+      }
+      // Update audio meter
+      const mb = document.getElementById('audio-meter-bass');
+      const mm = document.getElementById('audio-meter-mid');
+      const mt = document.getElementById('audio-meter-treble');
+      if (mb) mb.style.height = (4 + AudioReactivity.bass * 20) + 'px';
+      if (mm) mm.style.height = (4 + AudioReactivity.mid * 20) + 'px';
+      if (mt) mt.style.height = (4 + AudioReactivity.treble * 20) + 'px';
+    }
+
     // Logo bounds
     const logoAspect = logoCanvas.width / logoCanvas.height;
     const sc = p.scale * Math.min(W, H / logoAspect);
@@ -2413,6 +2563,47 @@ function initUI() {
     });
   }
 
+  // Audio reactivity controls
+  const audioCheck = document.getElementById('p-audioEnabled');
+  const audioLabel = document.getElementById('v-audioEnabled');
+  if (audioCheck) {
+    audioCheck.checked = params.audioEnabled;
+    audioLabel.textContent = params.audioEnabled ? 'On' : 'Off';
+    audioCheck.addEventListener('change', async () => {
+      params.audioEnabled = audioCheck.checked;
+      audioLabel.textContent = audioCheck.checked ? 'On' : 'Off';
+      if (audioCheck.checked) {
+        const ok = await AudioReactivity.init(params.audioSource);
+        if (!ok) {
+          params.audioEnabled = false;
+          audioCheck.checked = false;
+          audioLabel.textContent = 'Off';
+          console.warn('[mote] audio init failed');
+        }
+      } else {
+        AudioReactivity.suspend();
+      }
+    });
+  }
+
+  const audioSourceSelect = document.getElementById('p-audioSource');
+  if (audioSourceSelect) {
+    audioSourceSelect.value = params.audioSource;
+    audioSourceSelect.addEventListener('change', () => {
+      params.audioSource = audioSourceSelect.value;
+    });
+  }
+
+  const audioImpactSlider = document.getElementById('p-audioImpact');
+  if (audioImpactSlider) {
+    audioImpactSlider.value = params.audioImpact;
+    document.getElementById('v-audioImpact').textContent = formatVal(params.audioImpact, 0.05);
+    audioImpactSlider.addEventListener('input', () => {
+      params.audioImpact = parseFloat(audioImpactSlider.value);
+      document.getElementById('v-audioImpact').textContent = formatVal(params.audioImpact, 0.05);
+    });
+  }
+
   // Color mode select
   const colorModeSelect = document.getElementById('p-colorMode');
   if (colorModeSelect) {
@@ -2760,6 +2951,12 @@ function updateUI() {
   if (bloomSlider) { bloomSlider.value = params.bloomIntensity; document.getElementById('v-bloomIntensity').textContent = formatVal(params.bloomIntensity, 0.05); }
   const gradeSelect = document.getElementById('p-colorGrade');
   if (gradeSelect) gradeSelect.value = params.colorGrade;
+  // Audio
+  cb('p-audioEnabled', 'audioEnabled');
+  const audioSourceSelect = document.getElementById('p-audioSource');
+  if (audioSourceSelect) audioSourceSelect.value = params.audioSource;
+  const audioImpactSlider = document.getElementById('p-audioImpact');
+  if (audioImpactSlider) { audioImpactSlider.value = params.audioImpact; document.getElementById('v-audioImpact').textContent = formatVal(params.audioImpact, 0.05); }
   const color2Input = document.getElementById('p-colorSecondary');
   const color2Val = document.getElementById('v-colorSecondary');
   if (color2Input) { color2Input.value = params.colorSecondary; color2Val.textContent = params.colorSecondary; }
@@ -4411,6 +4608,15 @@ async function boot() {
     }
 
     connectWS();
+  }
+
+  // Auto-init audio if ?audio= param is set
+  if (audioParam) {
+    params.audioEnabled = true;
+    params.audioSource = audioParam === 'mic' ? 'mic' : 'element';
+    AudioReactivity.init(params.audioSource).catch(function() {
+      params.audioEnabled = false;
+    });
   }
 
     // Start self-healing render loop
