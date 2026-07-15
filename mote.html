@@ -1597,6 +1597,29 @@ function updateLightning() {
   }
 }
 
+// Decay-only variant — runs on off-frames when full update is throttled
+function updateLightningDecay() {
+  for (const ep of edgeParticles) {
+    if (ep.lightning > 0) { ep.lightning -= 0.08; if (ep.lightning < 0) ep.lightning = 0; }
+  }
+  for (const mp of particles) {
+    if (mp.lightning > 0) { mp.lightning -= 0.08; if (mp.lightning < 0) mp.lightning = 0; }
+  }
+  for (let bi = lightningBolts.length - 1; bi >= 0; bi--) {
+    lightningBolts[bi].life -= 0.12;
+    if (lightningBolts[bi].life <= 0) lightningBolts.splice(bi, 1);
+  }
+  for (let pi = lightningPaths.length - 1; pi >= 0; pi--) {
+    const lp = lightningPaths[pi];
+    lp.progress += 0.32;
+    if (lp.progress >= 1) {
+      if (lp.strikes < 2 && Math.random() < 0.1) { lp.progress = 0; lp.strikes++; }
+      else { lp.life -= 0.15; }
+    }
+    if (lp.life <= 0) lightningPaths.splice(pi, 1);
+  }
+}
+
 function drawStars() {
   ctx.fillStyle = '#ffffff';
   for (const s of stars) {
