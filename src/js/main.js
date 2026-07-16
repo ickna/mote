@@ -87,7 +87,10 @@ const DEFAULT_PARAMS = {
   kaleidoscopeSegments: 6,
   // God Rays
   godRaysEnabled: false,
-  godRaysIntensity: 0.4
+  godRaysIntensity: 0.4,
+  // Waveform Visualizer
+  waveformEnabled: false,
+  waveformMode: "bars"
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -317,6 +320,13 @@ const AudioReactivity = {
     if (this.stream) this.stream.getTracks().forEach(t => t.stop());
     if (this.ctx) this.ctx.close();
     this.initialized = false;
+  },
+
+  getSpectrum() {
+    if (!this.analyser) return null;
+    const data = new Uint8Array(this.analyser.frequencyBinCount);
+    this.analyser.getByteFrequencyData(data);
+    return data;
   }
 };
 
@@ -1425,6 +1435,25 @@ function frame(t) {
       let targetX = pt.tx + waveX;
       let targetY = pt.ty + waveY;
       if (p.swirlEnabled) { const sx=targetX-lcx,sy=targetY-lcy,sd=Math.sqrt(sx*sx+sy*sy),sa=Math.atan2(sy,sx)+p.swirlIntensity*0.04*(1+sd*0.002);targetX=lcx+Math.cos(sa)*sd;targetY=lcy+Math.sin(sa)*sd; }
+      // Waveform visualizer — map particles to FFT spectrum
+      if (p.waveformEnabled && p.audioEnabled && AudioReactivity.initialized) {
+        const spec = AudioReactivity.getSpectrum();
+        if (spec) {
+          const bins = spec.length;
+          const pi = Math.floor((pt.index / particles.length) * bins);
+          const mag = spec[pi] / 255;
+          if (p.waveformMode === 'bars') {
+            const barW = lw / bins * 2;
+            targetX = lx + pi * (lw / bins) + barW / 2;
+            targetY = ly + lh - mag * lh;
+          } else {
+            const angle = (pi / bins) * Math.PI * 2;
+            const rad = lh * 0.15 + mag * lh * 0.5;
+            targetX = cx + Math.cos(angle) * rad;
+            targetY = cy + Math.sin(angle) * rad;
+          }
+        }
+      }
       const depthSign = Math.sin(t * 0.0003 + pt.tx * 0.01 + pt.ty * 0.01);
       const targetZ = depthSign * Math.min(35, (pt.edgeDist || 0) * 0.8) * (p.zDispersion / 60) + waveZ;
 
@@ -2159,7 +2188,8 @@ function sampleIckna(canvas) {
           y: Math.sin(Math.random() * Math.PI * 2) * (500 + Math.random() * 1500),
           z: (Math.random() - 0.5) * 50,
           size: szMin + Math.pow(Math.random(), 2) * (szMax - szMin),
-          phase: Math.random() * Math.PI * 2
+          phase: Math.random() * Math.PI * 2,
+          index: list.length
         });
       }
     }
@@ -2287,6 +2317,7 @@ const paramBindings = [
   { id: "burstDecay", el: "p-burstDecay", val: "v-burstDecay", min: 0.8, max: 0.99, step: 0.01 },
   { id: "kaleidoscopeSegments", el: "p-kaleidoscopeSegments", val: "v-kaleidoscopeSegments", min: 2, max: 16, step: 1 },
   { id: "godRaysIntensity", el: "p-godRaysIntensity", val: "v-godRaysIntensity", min: 0.1, max: 1, step: 0.05 },
+  { id: "waveformMode", el: "p-waveformMode-select", val: null, type: "select" },
 ];
 
 function initUI() {
@@ -2505,6 +2536,9 @@ function initUI() {
   // Strobe toggle
   // Kaleido toggle
   // God Rays toggle
+  // Waveform toggle
+  const wfCheck=document.getElementById("p-waveformEnabled");const wfLabel=document.getElementById("v-waveformEnabled");if(wfCheck){wfCheck.checked=params.waveformEnabled;wfLabel.textContent=params.waveformEnabled?"On":"Off";wfCheck.addEventListener("change",()=>{params.waveformEnabled=wfCheck.checked;wfLabel.textContent=wfCheck.checked?"On":"Off"});}
+  const wfMode=document.getElementById("p-waveformMode");if(wfMode){wfMode.value=params.waveformMode;wfMode.addEventListener("change",()=>{params.waveformMode=wfMode.value});}
   const grCheck=document.getElementById("p-godRaysEnabled");const grLabel=document.getElementById("v-godRaysEnabled");if(grCheck){grCheck.checked=params.godRaysEnabled;grLabel.textContent=params.godRaysEnabled?"On":"Off";grCheck.addEventListener("change",()=>{params.godRaysEnabled=grCheck.checked;grLabel.textContent=grCheck.checked?"On":"Off"});}
   const kaleiCheck=document.getElementById("p-kaleidoscopeEnabled");const kaleiLabel=document.getElementById("v-kaleidoscopeEnabled");if(kaleiCheck){kaleiCheck.checked=params.kaleidoscopeEnabled;kaleiLabel.textContent=params.kaleidoscopeEnabled?"On":"Off";kaleiCheck.addEventListener("change",()=>{params.kaleidoscopeEnabled=kaleiCheck.checked;kaleiLabel.textContent=kaleiCheck.checked?"On":"Off"});}
   const strobeCheck=document.getElementById("p-strobeEnabled");const strobeLabel=document.getElementById("v-strobeEnabled");if(strobeCheck){strobeCheck.checked=params.strobeEnabled;strobeLabel.textContent=params.strobeEnabled?"On":"Off";strobeCheck.addEventListener("change",()=>{params.strobeEnabled=strobeCheck.checked;strobeLabel.textContent=strobeCheck.checked?"On":"Off"});}
@@ -2843,6 +2877,7 @@ function updateUI() {
   cb("p-swirlEnabled", "swirlEnabled");
   cb("p-kaleidoscopeEnabled", "kaleidoscopeEnabled");
   cb("p-godRaysEnabled", "godRaysEnabled");
+  cb("p-waveformEnabled", "waveformEnabled");
   const audioSourceSelect = document.getElementById('p-audioSource');
   if (audioSourceSelect) audioSourceSelect.value = params.audioSource;
   const audioImpactSlider = document.getElementById('p-audioImpact');
@@ -3813,7 +3848,8 @@ function sampleParticles() {
           y: Math.sin(Math.random() * Math.PI * 2) * (500 + Math.random() * 1500),
           z: (Math.random() - 0.5) * 50,
           size: szMin + Math.pow(Math.random(), 2) * (szMax - szMin),
-          phase: Math.random() * Math.PI * 2
+          phase: Math.random() * Math.PI * 2,
+          index: list.length
         });
       }
     }
@@ -3994,6 +4030,25 @@ function frame(t) {
       let targetX = pt.tx + waveX;
       let targetY = pt.ty + waveY;
       if (p.swirlEnabled) { const sx=targetX-lcx,sy=targetY-lcy,sd=Math.sqrt(sx*sx+sy*sy),sa=Math.atan2(sy,sx)+p.swirlIntensity*0.04*(1+sd*0.002);targetX=lcx+Math.cos(sa)*sd;targetY=lcy+Math.sin(sa)*sd; }
+      // Waveform visualizer — map particles to FFT spectrum
+      if (p.waveformEnabled && p.audioEnabled && AudioReactivity.initialized) {
+        const spec = AudioReactivity.getSpectrum();
+        if (spec) {
+          const bins = spec.length;
+          const pi = Math.floor((pt.index / particles.length) * bins);
+          const mag = spec[pi] / 255;
+          if (p.waveformMode === 'bars') {
+            const barW = lw / bins * 2;
+            targetX = lx + pi * (lw / bins) + barW / 2;
+            targetY = ly + lh - mag * lh;
+          } else {
+            const angle = (pi / bins) * Math.PI * 2;
+            const rad = lh * 0.15 + mag * lh * 0.5;
+            targetX = cx + Math.cos(angle) * rad;
+            targetY = cy + Math.sin(angle) * rad;
+          }
+        }
+      }
       const depthSign = Math.sin(t * 0.0003 + pt.tx * 0.01 + pt.ty * 0.01);
       const targetZ = depthSign * Math.min(35, (pt.edgeDist || 0) * 0.8) * (p.zDispersion / 60) + waveZ;
       const rotated = applyRotYawPitch({x: targetX - lcx, y: targetY - lcy, z: targetZ}, effectiveYaw, pitch);
