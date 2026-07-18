@@ -158,25 +158,27 @@ function hueShift(hex,delta){const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(
     case 'midpoint': t = t < mid ? (t / mid) * 0.5 : 0.5 + (t - mid) / (1 - mid) * 0.5; break;
   }
   t = Math.max(0, Math.min(1, t));
-  // Palette cycling animation (non-angular modes)
+  // Palette cycling: override endpoint colors but keep the mapping t value
+  var activeRgb1 = rgb1, activeRgb2 = rgb2, activeRgb3 = rgb3;
   if (p.colorAnimEnabled && p.colorMode !== 'gradient-angular') {
     var pal = PALETTES[p.palette] || PALETTES.custom;
     var cols = pal.colors;
     var phase = (p.colorAnimPhase || 0) * (p.colorAnimSpeed || 0.5) * 0.3;
     var idx = Math.floor(phase) % cols.length;
     var nextIdx = (idx + 1) % cols.length;
+    var nextNextIdx = (idx + 2) % cols.length;
     var frac = phase - Math.floor(phase);
-    var c1 = hexToRgb(cols[idx]);
-    var c2 = hexToRgb(cols[nextIdx]);
-    return lerpRgb(c1, c2, frac);
+    activeRgb1 = hexToRgb(cols[idx]);
+    activeRgb2 = hexToRgb(cols[nextIdx]);
+    activeRgb3 = hexToRgb(cols[nextNextIdx]);
   }
   // 3-color lerp: t=0 -> color1, t=0.5 -> color3, t=1 -> color2
-  if (rgb3 && rgb3.r !== undefined) {
-    if (t < 0.5) return lerpRgb(rgb1, rgb3, t * 2);
-    return lerpRgb(rgb3, rgb2, (t - 0.5) * 2);
+  if (activeRgb3 && activeRgb3.r !== undefined) {
+    if (t < 0.5) return lerpRgb(activeRgb1, activeRgb3, t * 2);
+    return lerpRgb(activeRgb3, activeRgb2, (t - 0.5) * 2);
   }
-  if (rgb2 && rgb2.r !== undefined) {
-    return lerpRgb(rgb1, rgb2, t);
+  if (activeRgb2 && activeRgb2.r !== undefined) {
+    return lerpRgb(activeRgb1, activeRgb2, t);
   }
   return p.color;
 }
@@ -3280,25 +3282,27 @@ function getParticleColor(pt, p, rgb1, rgb2, rgb3) {
     case 'midpoint': t = t < mid ? (t / mid) * 0.5 : 0.5 + (t - mid) / (1 - mid) * 0.5; break;
   }
   t = Math.max(0, Math.min(1, t));
-  // Palette cycling animation (non-angular modes)
+  // Palette cycling: override endpoint colors but keep the mapping t value
+  var activeRgb1 = rgb1, activeRgb2 = rgb2, activeRgb3 = rgb3;
   if (p.colorAnimEnabled && p.colorMode !== 'gradient-angular') {
     var pal = PALETTES[p.palette] || PALETTES.custom;
     var cols = pal.colors;
     var phase = (p.colorAnimPhase || 0) * (p.colorAnimSpeed || 0.5) * 0.3;
     var idx = Math.floor(phase) % cols.length;
     var nextIdx = (idx + 1) % cols.length;
+    var nextNextIdx = (idx + 2) % cols.length;
     var frac = phase - Math.floor(phase);
-    var c1 = hexToRgb(cols[idx]);
-    var c2 = hexToRgb(cols[nextIdx]);
-    return lerpRgb(c1, c2, frac);
+    activeRgb1 = hexToRgb(cols[idx]);
+    activeRgb2 = hexToRgb(cols[nextIdx]);
+    activeRgb3 = hexToRgb(cols[nextNextIdx]);
   }
   // 3-color lerp: t=0 -> color1, t=0.5 -> color3, t=1 -> color2
-  if (rgb3 && rgb3.r !== undefined) {
-    if (t < 0.5) return lerpRgb(rgb1, rgb3, t * 2);
-    return lerpRgb(rgb3, rgb2, (t - 0.5) * 2);
+  if (activeRgb3 && activeRgb3.r !== undefined) {
+    if (t < 0.5) return lerpRgb(activeRgb1, activeRgb3, t * 2);
+    return lerpRgb(activeRgb3, activeRgb2, (t - 0.5) * 2);
   }
-  if (rgb2 && rgb2.r !== undefined) {
-    return lerpRgb(rgb1, rgb2, t);
+  if (activeRgb2 && activeRgb2.r !== undefined) {
+    return lerpRgb(activeRgb1, activeRgb2, t);
   }
   return p.color;
 }
