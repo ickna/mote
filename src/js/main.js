@@ -123,13 +123,13 @@ function hueShift(hex,delta){const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(
   let t;
   switch (p.colorMode) {
     case 'gradient-z': t = (pt.z + 100) / 400; break;
-    case 'gradient-position': t = Math.min(1, Math.sqrt(pt.px * pt.px + pt.py * pt.py) / 600); break;
+    case 'gradient-position': t = Math.min(1, Math.sqrt(pt.px * pt.px + pt.py * pt.py) / Math.max(1, (pt.cx || 400))); break;
     case 'gradient-angular': t = (Math.atan2(pt.py, pt.px) / (Math.PI * 2) + 0.5); break;
-    case 'gradient-wave': t = 0.5 + 0.5 * Math.sin(Math.sqrt(pt.px * pt.px + pt.py * pt.py) * 0.01 + pt.phase); break;
-    case 'gradient-edge': t = (pt.pt && pt.pt.edgeDist !== undefined) ? Math.min(1, (pt.pt.edgeDist || 0) / 40) : 0.5; break;
-    case 'gradient-velocity': t = pt.pt ? Math.min(1, Math.sqrt((pt.pt.vx||0)*(pt.pt.vx||0) + (pt.pt.vy||0)*(pt.pt.vy||0)) / 3) : 0.5; break;
-    case 'gradient-y': t = (pt.py + 400) / 800; break;
-    case 'gradient-x': t = (pt.px + 600) / 1200; break;
+    case 'gradient-wave': t = 0.5 + 0.5 * Math.sin(Math.sqrt(pt.px * pt.px + pt.py * pt.py) * 0.008 + pt.phase); break;
+    case 'gradient-edge': t = (pt.pt && pt.pt.edgeDist !== undefined) ? Math.min(1, (pt.pt.edgeDist || 0) / 50) : 0.5; break;
+    case 'gradient-velocity': t = pt.pt ? Math.min(1, Math.sqrt(((pt.pt.vx||0)*(pt.pt.vx||0) + (pt.pt.vy||0)*(pt.pt.vy||0))) * 3) : 0.5; break;
+    case 'gradient-y': t = 0.5 - pt.py / (pt.cy ? pt.cy * 2 : 700); break;
+    case 'gradient-x': t = 0.5 + pt.px / (pt.cx ? pt.cx * 2 : 1200); break;
     case 'gradient-random': t = (pt.phase / (Math.PI * 2)); break;
     default: return p.color;
   }
@@ -1541,7 +1541,7 @@ function frame(t) {
       for (const pp of projected) {
         if (pp.pt && pp.pt.flame < -0.01) continue;
         ctx.globalAlpha = Math.max(0.3, Math.min(1, pp.alpha));
-        ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px, py: pp.py, phase: pp.pt ? pp.pt.phase : 0}, p, rgb1core, rgb2core) : LOGO_COLOR;
+        ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core) : LOGO_COLOR;
         ctx.beginPath();
         ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
         ctx.fill();
@@ -1572,7 +1572,7 @@ function frame(t) {
             // Tint with base particle color (or gradient color)
             ctx.globalCompositeOperation = 'source-atop';
             ctx.globalAlpha = 0.5;
-            ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px, py: pp.py, phase: pp.pt ? pp.pt.phase : 0}, p, rgb1core, rgb2core) : LOGO_COLOR;
+            ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core) : LOGO_COLOR;
             ctx.beginPath();
             ctx.arc(pp.px, pp.py, adjGlowSize, 0, Math.PI * 2);
             ctx.fill();
@@ -1607,7 +1607,7 @@ function frame(t) {
         ctx.shadowBlur = p.glowBlur;
         for (const pp of projected) {
           ctx.globalAlpha = Math.max(0.15, Math.min(1, pp.alpha));
-          ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px, py: pp.py, phase: pp.pt ? pp.pt.phase : 0}, p, rgb1core, rgb2core) : LOGO_COLOR;
+          ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core) : LOGO_COLOR;
           ctx.beginPath();
           ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
           ctx.fill();
@@ -3109,13 +3109,13 @@ function getParticleColor(pt, p, rgb1, rgb2) {
   let t;
   switch (p.colorMode) {
     case 'gradient-z': t = (pt.z + 100) / 400; break;
-    case 'gradient-position': t = Math.min(1, Math.sqrt(pt.px * pt.px + pt.py * pt.py) / 600); break;
+    case 'gradient-position': t = Math.min(1, Math.sqrt(pt.px * pt.px + pt.py * pt.py) / Math.max(1, (pt.cx || 400))); break;
     case 'gradient-angular': t = (Math.atan2(pt.py, pt.px) / (Math.PI * 2) + 0.5); break;
-    case 'gradient-wave': t = 0.5 + 0.5 * Math.sin(Math.sqrt(pt.px * pt.px + pt.py * pt.py) * 0.01 + pt.phase); break;
-    case 'gradient-edge': t = (pt.pt && pt.pt.edgeDist !== undefined) ? Math.min(1, (pt.pt.edgeDist || 0) / 40) : 0.5; break;
-    case 'gradient-velocity': t = pt.pt ? Math.min(1, Math.sqrt((pt.pt.vx||0)*(pt.pt.vx||0) + (pt.pt.vy||0)*(pt.pt.vy||0)) / 3) : 0.5; break;
-    case 'gradient-y': t = (pt.py + 400) / 800; break;
-    case 'gradient-x': t = (pt.px + 600) / 1200; break;
+    case 'gradient-wave': t = 0.5 + 0.5 * Math.sin(Math.sqrt(pt.px * pt.px + pt.py * pt.py) * 0.008 + pt.phase); break;
+    case 'gradient-edge': t = (pt.pt && pt.pt.edgeDist !== undefined) ? Math.min(1, (pt.pt.edgeDist || 0) / 50) : 0.5; break;
+    case 'gradient-velocity': t = pt.pt ? Math.min(1, Math.sqrt(((pt.pt.vx||0)*(pt.pt.vx||0) + (pt.pt.vy||0)*(pt.pt.vy||0))) * 3) : 0.5; break;
+    case 'gradient-y': t = 0.5 - pt.py / (pt.cy ? pt.cy * 2 : 700); break;
+    case 'gradient-x': t = 0.5 + pt.px / (pt.cx ? pt.cx * 2 : 1200); break;
     case 'gradient-random': t = (pt.phase / (Math.PI * 2)); break;
     default: return p.color;
   }
@@ -4118,7 +4118,7 @@ function frame(t) {
       for (const pp of projected) {
         if (pp.pt && pp.pt.flame < -0.01) continue;
         ctx.globalAlpha = Math.max(0.3, Math.min(1, pp.alpha));
-        ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px, py: pp.py, phase: pp.pt ? pp.pt.phase : 0}, p, rgb1core, rgb2core) : LOGO_COLOR;
+        ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core) : LOGO_COLOR;
         ctx.beginPath();
         ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
         ctx.fill();
@@ -4183,7 +4183,7 @@ function frame(t) {
         ctx.shadowBlur = p.glowBlur;
         for (const pp of projected) {
           ctx.globalAlpha = Math.max(0.15, Math.min(1, pp.alpha));
-          ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px, py: pp.py, phase: pp.pt ? pp.pt.phase : 0}, p, rgb1core, rgb2core) : LOGO_COLOR;
+          ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core) : LOGO_COLOR;
           ctx.beginPath();
           ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
           ctx.fill();
