@@ -123,7 +123,13 @@ function hueShift(hex,delta){const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(
   let t;
   switch (p.colorMode) {
     case 'gradient-z': t = (pt.z + 100) / 400; break;
-    case 'gradient-position': t = ((pt.px + pt.py) / 800 + 0.5) % 1; break;
+    case 'gradient-position': t = Math.min(1, Math.sqrt(pt.px * pt.px + pt.py * pt.py) / 600); break;
+    case 'gradient-angular': t = (Math.atan2(pt.py, pt.px) / (Math.PI * 2) + 0.5); break;
+    case 'gradient-wave': t = 0.5 + 0.5 * Math.sin(Math.sqrt(pt.px * pt.px + pt.py * pt.py) * 0.01 + pt.phase); break;
+    case 'gradient-edge': t = (pt.pt && pt.pt.edgeDist !== undefined) ? Math.min(1, (pt.pt.edgeDist || 0) / 40) : 0.5; break;
+    case 'gradient-velocity': t = pt.pt ? Math.min(1, Math.sqrt((pt.pt.vx||0)*(pt.pt.vx||0) + (pt.pt.vy||0)*(pt.pt.vy||0)) / 3) : 0.5; break;
+    case 'gradient-y': t = (pt.py + 400) / 800; break;
+    case 'gradient-x': t = (pt.px + 600) / 1200; break;
     case 'gradient-random': t = (pt.phase / (Math.PI * 2)); break;
     default: return p.color;
   }
@@ -2482,18 +2488,6 @@ function initUI() {
     });
   }
 
-  // Drag rotation toggle
-  const dragCheck = document.getElementById('p-dragEnabled');
-  const dragLabel = document.getElementById('v-dragEnabled');
-  if (dragCheck) {
-    dragCheck.checked = params.dragEnabled;
-    dragLabel.textContent = params.dragEnabled ? 'On' : 'Off';
-    dragCheck.addEventListener('change', () => {
-      params.dragEnabled = dragCheck.checked;
-      dragLabel.textContent = dragCheck.checked ? 'On' : 'Off';
-      if (window.setDragEnabled) window.setDragEnabled(dragCheck.checked);
-    });
-  }
 
   // Hue cycle toggle
   const hueCheck = document.getElementById("p-hueCycle");
@@ -2844,7 +2838,6 @@ function updateUI() {
   // Audio
   cb('p-audioEnabled', 'audioEnabled');
   // Drag
-  cb('p-dragEnabled', 'dragEnabled');
   cb('p-starfieldEnabled', 'starfieldEnabled');
   cb("p-hueCycle", "hueCycle");
   cb("p-strobeEnabled", "strobeEnabled");
@@ -3116,7 +3109,13 @@ function getParticleColor(pt, p, rgb1, rgb2) {
   let t;
   switch (p.colorMode) {
     case 'gradient-z': t = (pt.z + 100) / 400; break;
-    case 'gradient-position': t = ((pt.px + pt.py) / 800 + 0.5) % 1; break;
+    case 'gradient-position': t = Math.min(1, Math.sqrt(pt.px * pt.px + pt.py * pt.py) / 600); break;
+    case 'gradient-angular': t = (Math.atan2(pt.py, pt.px) / (Math.PI * 2) + 0.5); break;
+    case 'gradient-wave': t = 0.5 + 0.5 * Math.sin(Math.sqrt(pt.px * pt.px + pt.py * pt.py) * 0.01 + pt.phase); break;
+    case 'gradient-edge': t = (pt.pt && pt.pt.edgeDist !== undefined) ? Math.min(1, (pt.pt.edgeDist || 0) / 40) : 0.5; break;
+    case 'gradient-velocity': t = pt.pt ? Math.min(1, Math.sqrt((pt.pt.vx||0)*(pt.pt.vx||0) + (pt.pt.vy||0)*(pt.pt.vy||0)) / 3) : 0.5; break;
+    case 'gradient-y': t = (pt.py + 400) / 800; break;
+    case 'gradient-x': t = (pt.px + 600) / 1200; break;
     case 'gradient-random': t = (pt.phase / (Math.PI * 2)); break;
     default: return p.color;
   }
@@ -4751,6 +4750,16 @@ async function boot() {
       dragListenersActive = false;
     }
   };
+  // Drag rotation button (next to FX)
+  const dragBtn = document.getElementById('drag-btn');
+  if (dragBtn) {
+    if (params.dragEnabled) dragBtn.classList.add('active');
+    dragBtn.addEventListener('click', () => {
+      params.dragEnabled = !params.dragEnabled;
+      dragBtn.classList.toggle('active', params.dragEnabled);
+      if (window.setDragEnabled) window.setDragEnabled(params.dragEnabled);
+    });
+  }
   if (params.dragEnabled) setDragEnabled(true);
 
   // Keyboard controls

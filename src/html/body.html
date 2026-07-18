@@ -14,7 +14,16 @@
 
 <!-- ── Playback hamburger menu ───────────────── -->
 <div id="pmenu">
-  <button id="pmenu-btn">FX</button>
+  <div id="pmenu-row">
+    <button id="pmenu-btn">FX</button>
+    <button id="drag-btn" title="Toggle drag rotation">
+      <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="8"/>
+        <path d="M16.5 9.5a6 6 0 0 1 0 5"/>
+        <polyline points="16.5 14.5 14 13 16 11"/>
+      </svg>
+    </button>
+  </div>
   <div id="pmenu-items">
     <div class="pmenu-row" data-action="ice">
       <span class="pmenu-label">❄️ Ice</span>
@@ -85,7 +94,13 @@
                   <select id="p-colorMode" style="flex:1;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:11px;font-family:inherit">
                     <option value="solid">Solid</option>
                     <option value="gradient-z">Z Gradient</option>
-                    <option value="gradient-position">Position</option>
+                    <option value="gradient-position">Radial</option>
+                    <option value="gradient-angular">Angular</option>
+                    <option value="gradient-wave">Wave</option>
+                    <option value="gradient-edge">Edge Distance</option>
+                    <option value="gradient-velocity">Velocity</option>
+                    <option value="gradient-y">Y Position</option>
+                    <option value="gradient-x">X Position</option>
                     <option value="gradient-random">Random</option>
                   </select>
                 </div>
@@ -214,12 +229,6 @@
                     <div class="audio-meter-bar" id="audio-meter-mid"></div>
                     <div class="audio-meter-bar" id="audio-meter-treble"></div>
                   </div>
-                </div>
-                <div class="param-row"><label>Drag Rotate</label>
-                  <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
-                    <input type="checkbox" id="p-dragEnabled" style="accent-color:var(--accent)">
-                    <span style="font-size:11px;opacity:.5" id="v-dragEnabled">Off</span>
-                  </label>
                 </div>
 <div class="param-row"><label>Hue Cycle</label>
                   <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
