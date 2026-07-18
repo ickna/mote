@@ -67,7 +67,6 @@ const DEFAULT_PARAMS = {
     waveFreq: 1,
     radialStretch: 1,
     edgeScale: 50,
-    velocityScale: 3,
   },
   // Animation
   anim: {},
@@ -111,7 +110,7 @@ const DEFAULT_PARAMS = {
 // ═══════════════════════════════════════════════════════════════
 
 const PALETTES = {
-  custom: { name: 'Custom', colors: ['#e03030', '#7b2ff7'] },
+  custom: { name: 'Custom', colors: ['#e03030', '#7b2ff7', '#ff8800'] },
   fire: { name: 'Fire', colors: ['#e03030', '#ff6b35', '#f7c59f'] },
   ocean: { name: 'Ocean', colors: ['#00d4ff', '#0077b6', '#023e8a'] },
   aurora: { name: 'Aurora', colors: ['#00ff87', '#60efff', '#7b2ff7'] },
@@ -144,7 +143,6 @@ function hueShift(hex,delta){const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(
     case 'gradient-angular': t = (Math.atan2(pt.py, pt.px) / (Math.PI * 2) + 0.5 + (cp.angularOffset || 0) + anim * spd) % 1; break;
     case 'gradient-wave': t = 0.5 + 0.5 * Math.sin(Math.sqrt(pt.px * pt.px + pt.py * pt.py) * 0.008 * (cp.waveFreq || 1) + pt.phase + anim * spd * 2); break;
     case 'gradient-edge': t = (pt.pt && pt.pt.edgeDist !== undefined) ? Math.min(1, (pt.pt.edgeDist || 0) / (cp.edgeScale || 50)) : 0.5; break;
-    case 'gradient-velocity': t = pt.pt ? Math.min(1, Math.sqrt(((pt.pt.vx||0)*(pt.pt.vx||0) + (pt.pt.vy||0)*(pt.pt.vy||0))) * (cp.velocityScale || 3)) : 0.5; break;
     case 'gradient-y': t = 0.5 - pt.py / (pt.cy ? pt.cy * 2 : 700); break;
     case 'gradient-x': t = 0.5 + pt.px / (pt.cx ? pt.cx * 2 : 1200); break;
     case 'gradient-random': t = (pt.phase / (Math.PI * 2)); break;
@@ -160,7 +158,23 @@ function hueShift(hex,delta){const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(
     case 'midpoint': t = t < mid ? (t / mid) * 0.5 : 0.5 + (t - mid) / (1 - mid) * 0.5; break;
   }
   t = Math.max(0, Math.min(1, t));
-  // 3-color lerp if rgb3 provided
+  // Palette cycling animation (non-angular modes)
+  if (p.colorAnimEnabled && p.colorMode !== 'gradient-angular') {
+    var pal = PALETTES[p.palette] || PALETTES.custom;
+    var cols = pal.colors;
+    var phase = (p.colorAnimPhase || 0) * (p.colorAnimSpeed || 0.5) * 0.3;
+    var idx = Math.floor(phase) % cols.length;
+    var nextIdx = (idx + 1) % cols.length;
+    var frac = phase - Math.floor(phase);
+    var c1 = hexToRgb(cols[idx]);
+    var c2 = hexToRgb(cols[nextIdx]);
+    return lerpRgb(c1, c2, frac);
+  }
+  // 3-color lerp: t=0 -> color1, t=0.5 -> color3, t=1 -> color2
+  if (rgb3 && rgb3.r !== undefined) {
+    if (t < 0.5) return lerpRgb(rgb1, rgb3, t * 2);
+    return lerpRgb(rgb3, rgb2, (t - 0.5) * 2);
+  }
   if (rgb2 && rgb2.r !== undefined) {
     return lerpRgb(rgb1, rgb2, t);
   }
@@ -2589,7 +2603,6 @@ function initUI() {
     {el:'p-cp-waveFreq', key:'waveFreq'},
     {el:'p-cp-radialStretch', key:'radialStretch'},
     {el:'p-cp-edgeScale', key:'edgeScale'},
-    {el:'p-cp-velocityScale', key:'velocityScale'},
   ];
   for (var si = 0; si < cpSliders.length; si++) {
     var sl = cpSliders[si];
@@ -2625,11 +2638,15 @@ function initUI() {
       if (pal && pal.colors.length >= 2) {
         params.color = pal.colors[0];
         params.colorSecondary = pal.colors[1] || pal.colors[0];
+        params.colorTertiary = pal.colors[2] || pal.colors[1] || pal.colors[0];
         params.palette = paletteSelect.value;
         document.getElementById('p-color').value = params.color;
         document.getElementById('v-color').textContent = params.color;
         document.getElementById('p-colorSecondary').value = params.colorSecondary;
         document.getElementById('v-colorSecondary').textContent = params.colorSecondary;
+        var c3i = document.getElementById('p-colorTertiary');
+        var c3v = document.getElementById('v-colorTertiary');
+        if (c3i) { c3i.value = params.colorTertiary; if (c3v) c3v.textContent = params.colorTertiary; }
       }
     });
   }
@@ -2893,12 +2910,10 @@ function updateColorVisibility(mode) {
   var wp = document.querySelector('.color-params-wave');
   var rp = document.querySelector('.color-params-radial');
   var ep = document.querySelector('.color-params-edge');
-  var vp = document.querySelector('.color-params-velocity');
   if (ap) ap.style.display = (mode === 'gradient-angular') ? '' : 'none';
   if (wp) wp.style.display = (mode === 'gradient-wave') ? '' : 'none';
   if (rp) rp.style.display = (mode === 'gradient-position') ? '' : 'none';
   if (ep) ep.style.display = (mode === 'gradient-edge') ? '' : 'none';
-  if (vp) vp.style.display = (mode === 'gradient-velocity') ? '' : 'none';
 }
 
 function updateLineThresholdVisibility(mode) {
@@ -2981,7 +2996,7 @@ function updateUI() {
   var casv = document.getElementById('v-colorAnimSpeed');
   if (cas) { cas.value = params.colorAnimSpeed; if (casv) casv.textContent = cas.value; }
   // Color params
-  var cpKeys = ['angularOffset','waveFreq','radialStretch','edgeScale','velocityScale'];
+  var cpKeys = ['angularOffset','waveFreq','radialStretch','edgeScale'];
   for (var ci = 0; ci < cpKeys.length; ci++) {
     var k = cpKeys[ci];
     var el = document.getElementById('p-cp-' + k);
@@ -3250,7 +3265,6 @@ function getParticleColor(pt, p, rgb1, rgb2, rgb3) {
     case 'gradient-angular': t = (Math.atan2(pt.py, pt.px) / (Math.PI * 2) + 0.5 + (cp.angularOffset || 0) + anim * spd) % 1; break;
     case 'gradient-wave': t = 0.5 + 0.5 * Math.sin(Math.sqrt(pt.px * pt.px + pt.py * pt.py) * 0.008 * (cp.waveFreq || 1) + pt.phase + anim * spd * 2); break;
     case 'gradient-edge': t = (pt.pt && pt.pt.edgeDist !== undefined) ? Math.min(1, (pt.pt.edgeDist || 0) / (cp.edgeScale || 50)) : 0.5; break;
-    case 'gradient-velocity': t = pt.pt ? Math.min(1, Math.sqrt(((pt.pt.vx||0)*(pt.pt.vx||0) + (pt.pt.vy||0)*(pt.pt.vy||0))) * (cp.velocityScale || 3)) : 0.5; break;
     case 'gradient-y': t = 0.5 - pt.py / (pt.cy ? pt.cy * 2 : 700); break;
     case 'gradient-x': t = 0.5 + pt.px / (pt.cx ? pt.cx * 2 : 1200); break;
     case 'gradient-random': t = (pt.phase / (Math.PI * 2)); break;
@@ -3266,7 +3280,23 @@ function getParticleColor(pt, p, rgb1, rgb2, rgb3) {
     case 'midpoint': t = t < mid ? (t / mid) * 0.5 : 0.5 + (t - mid) / (1 - mid) * 0.5; break;
   }
   t = Math.max(0, Math.min(1, t));
-  // 3-color lerp if rgb3 provided
+  // Palette cycling animation (non-angular modes)
+  if (p.colorAnimEnabled && p.colorMode !== 'gradient-angular') {
+    var pal = PALETTES[p.palette] || PALETTES.custom;
+    var cols = pal.colors;
+    var phase = (p.colorAnimPhase || 0) * (p.colorAnimSpeed || 0.5) * 0.3;
+    var idx = Math.floor(phase) % cols.length;
+    var nextIdx = (idx + 1) % cols.length;
+    var frac = phase - Math.floor(phase);
+    var c1 = hexToRgb(cols[idx]);
+    var c2 = hexToRgb(cols[nextIdx]);
+    return lerpRgb(c1, c2, frac);
+  }
+  // 3-color lerp: t=0 -> color1, t=0.5 -> color3, t=1 -> color2
+  if (rgb3 && rgb3.r !== undefined) {
+    if (t < 0.5) return lerpRgb(rgb1, rgb3, t * 2);
+    return lerpRgb(rgb3, rgb2, (t - 0.5) * 2);
+  }
   if (rgb2 && rgb2.r !== undefined) {
     return lerpRgb(rgb1, rgb2, t);
   }
