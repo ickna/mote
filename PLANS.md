@@ -95,7 +95,7 @@ SVG-to-particle engine. Canvas 2D, zero dependencies.
 
 **Goal:** Background gas cloud and per-particle glow texture.
 
-- [ ] *(skipped — not in scope)*
+- [x] *(removed — not in scope)*
 
 ## Phase 2.10 — Edge-to-Main Connection Lines
 

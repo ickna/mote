@@ -43,6 +43,7 @@ const DEFAULT_PARAMS = {
   color: '#e03030',
   colorSecondary: '#7b2ff7',
   colorMode: 'solid',
+  palette: 'custom',
   scale: 0.90,
   renderMode: 'ickna',
   // Background & trail
@@ -68,8 +69,6 @@ const DEFAULT_PARAMS = {
   audioImpact: 0.5,
   // Interaction
   dragEnabled: false,
-  // Nebula
-  nebulaEnabled: false,
   // Color Cycle
   hueCycle: false,
   hueCycleSpeed: 0.25,
@@ -183,9 +182,12 @@ let particles = [];
 let presetName = 'ickna';
 let currentSVG = ICKNA_SVG;
 const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+let ctx = canvas.getContext('2d');
 let W, H, DPR;
 let logoCanvas = null;
+// Half-res offscreen render target for performance
+let renderCanvas = null;
+let rctx = null;
 let animId = null;
 let engineReady = false;
 let waveNodes = []; // extracted from SVG circles
@@ -344,6 +346,12 @@ function resize() {
   canvas.style.width = W + 'px';
   canvas.style.height = H + 'px';
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // Half-res offscreen render target
+  var hw = Math.ceil(W / 2), hh = Math.ceil(H / 2);
+  renderCanvas = document.createElement('canvas');
+  renderCanvas.width = hw;
+  renderCanvas.height = hh;
+  rctx = renderCanvas.getContext('2d');
 }
 window.addEventListener('resize', resize);
 resize();
@@ -879,32 +887,45 @@ function initStars() {
 
 function updateFlame() {
   if (!params.flameEnabled) return;
+
+  // ── Ice / Cold Propagation ──
   for (const ep of edgeParticles) {
     if (ep.flame < 0) {
-      for (const ni of ep.neighbors) { const n = edgeParticles[ni]; if (n.flame > ep.flame) n.flame += (ep.flame - n.flame) * 0.08; }
-      for (const mi of ep.mainNeighbors) { const mp = particles[mi]; if (mp && mp.flame > ep.flame) mp.flame += (ep.flame - mp.flame) * 0.06; }
-      ep.flame += 0.004; if (ep.flame > 0) ep.flame = 0;
+      if (ep.flame < -0.5) {
+        for (const ni of ep.neighbors) { const n = edgeParticles[ni]; if (n.flame > ep.flame) n.flame += (ep.flame - n.flame) * 0.05; }
+        for (const mi of ep.mainNeighbors) { const mp = particles[mi]; if (mp && mp.flame > ep.flame) mp.flame += (ep.flame - mp.flame) * 0.15; }
+      }
+      ep.flame += 0.008; if (ep.flame > 0) ep.flame = 0;
     }
   }
   for (const mp of particles) {
     if (mp.flame < 0) {
-      if (Math.random() < 0.05) { for (let t = 0; t < 10; t++) { const r = Math.floor(Math.random() * particles.length); const nmp = particles[r]; if (nmp && nmp.flame > mp.flame && nmp !== mp) { const dx = mp.tx - nmp.tx, dy = mp.ty - nmp.ty; if (dx * dx + dy * dy < 3600) { nmp.flame += (mp.flame - nmp.flame) * 0.5; break; } } } }
-      mp.flame += 0.003; if (mp.flame > 0) mp.flame = 0;
+      if (Math.random() < 0.10) { for (let t = 0; t < 10; t++) { const r = Math.floor(Math.random() * particles.length); const nmp = particles[r]; if (nmp && nmp.flame > mp.flame && nmp !== mp) { const dx = mp.tx - nmp.tx, dy = mp.ty - nmp.ty; if (dx * dx + dy * dy < 3600) { nmp.flame += (mp.flame - nmp.flame) * 0.5; break; } } } }
+      mp.flame += 0.005; if (mp.flame > 0) mp.flame = 0;
     }
   }
+  // ── Edge Sparkle ──
+  for (const ep of edgeParticles) {
+    if (ep.sparkle <= 0) { if (Math.random() < 0.24) ep.sparkle = 0.5 + Math.random() * 0.5; }
+    else { ep.sparkle -= 0.04; if (ep.sparkle < 0) ep.sparkle = 0; }
+  }
+  // ── Forest Fire Propagation ──
   for (const ep of edgeParticles) {
     if (ep.flame > 0) {
       if (ep.flame > 1.2) {
-        for (const ni of ep.neighbors) { const n = edgeParticles[ni]; if (n.flame < 0.1 && ep.flame > 1.0) n.flame = 1.8; }
-        for (const mi of ep.mainNeighbors) { const mp = particles[mi]; if (mp && mp.flame < 0.1) mp.flame = 1.5; }
+        for (const ni of ep.neighbors) { const n = edgeParticles[ni]; if (n.flame < 0.1) n.flame = Math.max(0.5, ep.flame * 0.65); }
+        for (const mi of ep.mainNeighbors) { const mp = particles[mi]; if (mp && mp.flame < 0.1) mp.flame = Math.max(0.5, ep.flame * 0.50); }
       }
-      ep.flame -= 0.008; if (ep.flame < 0) ep.flame = 0;
+      ep.flame -= 0.010; if (ep.flame < 0) ep.flame = 0;
     }
   }
   for (const mp of particles) {
     if (mp.flame > 0) {
-      if (mp.flame > 1.2 && Math.random() < 0.1) { for (let t = 0; t < 20; t++) { const r = Math.floor(Math.random() * particles.length); const nmp = particles[r]; if (nmp && nmp.flame < 0.1 && nmp !== mp) { const dx = mp.tx - nmp.tx, dy = mp.ty - nmp.ty; if (dx * dx + dy * dy < 3600) { nmp.flame = 1.3; break; } } } }
-      mp.flame -= 0.006; if (mp.flame < 0) mp.flame = 0;
+      if (mp.flame > 1.2 && Math.random() < 0.1) {
+        for (let t = 0; t < 20; t++) { const r = Math.floor(Math.random() * particles.length); const nmp = particles[r]; if (nmp && nmp.flame < 0.1 && nmp !== mp) { const dx = mp.tx - nmp.tx, dy = mp.ty - nmp.ty; if (dx * dx + dy * dy < 3600) { nmp.flame = Math.max(0.5, mp.flame * 0.50); break; } } }
+        for (let t = 0; t < 10; t++) { const re = Math.floor(Math.random() * edgeParticles.length); const nep = edgeParticles[re]; if (nep && nep.flame < 0.1 && nep !== mp) { const dx = mp.tx - nep.tx, dy = mp.ty - nep.ty; if (dx * dx + dy * dy < 3600) { nep.flame = Math.max(0.5, mp.flame * 0.55); break; } } }
+      }
+      mp.flame -= 0.007; if (mp.flame < 0) mp.flame = 0;
     }
   }
 }
@@ -1221,79 +1242,26 @@ function drawStars() {
 // ═══════════════════════════════════════════════════════════════
 
 let ppCache = null;
-let nebulaCache = null;
-
-// ── Nebula rendering (simplex noise masked to SVG shape) ──────
-function renderNebula() {
-  if (!logoCanvas) return;
-  const tw = logoCanvas.width, th = logoCanvas.height;
-  if (nebulaCache && nebulaCache.width === tw && nebulaCache.height === th) return;
-
-  // Create blurred gas cloud from the logo
-  const gas = document.createElement('canvas');
-  gas.width = tw; gas.height = th;
-  const gctx = gas.getContext('2d');
-  gctx.filter = 'blur(12px)';
-  gctx.drawImage(logoCanvas, 0, 0);
-  gctx.filter = 'blur(8px)';
-  gctx.globalAlpha = 0.6;
-  gctx.drawImage(logoCanvas, 0, 0);
-  gctx.filter = 'none';
-  gctx.globalAlpha = 1;
-
-  // Noise texture
-  const noiseTex = document.createElement('canvas');
-  noiseTex.width = tw; noiseTex.height = th;
-  const nctx = noiseTex.getContext('2d');
-  const imageData = nctx.createImageData(tw, th);
-  const cell = Math.max(20, Math.floor(tw / 8));
-  for (let y = 0; y < th; y++) {
-    for (let x = 0; x < tw; x++) {
-      const n = simplex.noise(x / cell, y / cell);
-      const val = Math.max(0, Math.min(255, Math.round((n + 1) * 0.5 * 255)));
-      const idx = (y * tw + x) * 4;
-      imageData.data[idx] = val;
-      imageData.data[idx+1] = val;
-      imageData.data[idx+2] = val;
-      imageData.data[idx+3] = 200;
-    }
-  }
-  nctx.putImageData(imageData, 0, 0);
-
-  // Composite: noise masked to gas cloud
-  const combined = document.createElement('canvas');
-  combined.width = tw; combined.height = th;
-  const cctx = combined.getContext('2d');
-  cctx.drawImage(noiseTex, 0, 0);
-  cctx.globalCompositeOperation = 'destination-in';
-  cctx.drawImage(gas, 0, 0);
-  cctx.globalCompositeOperation = 'source-over';
-  cctx.globalAlpha = 0.35;
-  cctx.drawImage(gas, 0, 0);
-  cctx.globalAlpha = 1;
-
-  nebulaCache = combined;
-}
 
 function applyPostProcessing(p) {
   // Bloom: half-res blur + additive composite
   if (p.bloom && p.bloomIntensity > 0 && typeof ctx.filter !== 'undefined') {
     const hw = Math.ceil(W / 2), hh = Math.ceil(H / 2);
-    if (!ppCache || ppCache.width !== hw || ppCache.height !== hh) {
+    if (!ppCache || ppCache.width !== renderCanvas.width || ppCache.height !== renderCanvas.height) {
       ppCache = document.createElement('canvas');
-      ppCache.width = hw;
-      ppCache.height = hh;
+      ppCache.width = renderCanvas.width;
+      ppCache.height = renderCanvas.height;
     }
     const pc = ppCache.getContext('2d');
-    pc.clearRect(0, 0, hw, hh);
-    pc.drawImage(canvas, 0, 0, W, H, 0, 0, hw, hh);
+    pc.clearRect(0, 0, ppCache.width, ppCache.height);
+    pc.drawImage(renderCanvas, 0, 0);
     pc.filter = 'blur(' + Math.round(4 + p.bloomIntensity * 10) + 'px)';
     pc.globalCompositeOperation = 'source-over';
     pc.drawImage(ppCache, 0, 0);
     pc.filter = 'none';
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = p.bloomIntensity * 0.6;
-    ctx.drawImage(ppCache, 0, 0, hw, hh, 0, 0, W, H);
+    ctx.drawImage(ppCache, 0, 0, ppCache.width, ppCache.height, 0, 0, W, H);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
   }
@@ -1324,6 +1292,16 @@ function applyPostProcessing(p) {
 function frame(t) {
   try {
     if (!particles.length || !logoCanvas) { animId = requestAnimationFrame(frame); return; }
+
+    // ── Half-res offscreen redirect ──
+    var mainCtx = ctx;
+    var hw = renderCanvas.width, hh = renderCanvas.height;
+    ctx = rctx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, hw, hh);
+    var s2 = 0.5;
+    ctx.scale(s2, s2);
+
     const p = animEvaluate(params, params.anim, t - animStartTime);
 
     // Reset CSS filter from previous frame's color grade
@@ -1386,22 +1364,6 @@ function frame(t) {
 
     // ── Step 1: Clear ──
     ctx.clearRect(0, 0, W, H);
-
-    // ── Step 1.5: Nebula background ──
-    if (p.nebulaEnabled) {
-      renderNebula();
-      if (nebulaCache) {
-        // Render nebula texture centered and scaled to logo bounds
-        const naspect = nebulaCache.width / nebulaCache.height;
-        let nw, nh;
-        if (W / H > naspect) { nh = Math.min(H * 0.9, sc); nw = nh * naspect; }
-        else { nw = Math.min(W * 0.9, sc); nh = nw / naspect; }
-        const nx = (W - nw) / 2, ny = (H - nh) / 2;
-        ctx.globalAlpha = 0.3;
-        ctx.drawImage(nebulaCache, nx, ny, nw, nh);
-        ctx.globalAlpha = 1;
-      }
-    }
 
     // ── Step 2: Starfield ──
     if (p.starfieldEnabled && stars.length) drawStars();
@@ -1568,10 +1530,12 @@ function frame(t) {
       }
 
       // Core particles (skip cold)
+      var rgb1core = hexToRgb(p.color);
+      var rgb2core = p.colorSecondary && p.colorMode !== 'solid' ? hexToRgb(p.colorSecondary) : null;
       for (const pp of projected) {
         if (pp.pt && pp.pt.flame < -0.01) continue;
         ctx.globalAlpha = Math.max(0.3, Math.min(1, pp.alpha));
-        ctx.fillStyle = LOGO_COLOR;
+        ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px, py: pp.py, phase: pp.pt ? pp.pt.phase : 0}, p, rgb1core, rgb2core) : LOGO_COLOR;
         ctx.beginPath();
         ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
         ctx.fill();
@@ -1934,6 +1898,13 @@ function frame(t) {
 
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
+
+    // ── Blit half-res offscreen to main canvas ──
+    ctx = mainCtx;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(renderCanvas, 0, 0, hw, hh, 0, 0, W, H);
+
     applyPostProcessing(p);
     
     // Strobe flash overlay
@@ -1973,7 +1944,6 @@ function frame(t) {
 
 async function loadSVG(svgString, keepParticles) {
   currentSVG = svgString;
-  nebulaCache = null;  // invalidate nebula cache on SVG change
 
   // Detect image data URIs
   if (svgString.startsWith('data:image/')) {
@@ -2238,7 +2208,15 @@ function loadPreset(preset) {
       startTime: performance.now(),
       duration: params.transitionDuration || 800,
       oldParticles: particles.map(pt => ({ ...pt })),
-      oldEdgeParticles: edgeParticles.map(ep => ({ ...ep }))
+      oldEdgeParticles: edgeParticles.map(ep => ({ ...ep })),
+      oldLayers: layers.map(function(l) {
+        return {
+          logoCanvas: l.logoCanvas,
+          params: { ...l.params },
+          particles: (l.particles || []).map(function(pt) { return { ...pt }; }),
+          edgeParticles: (l.edgeParticles || []).map(function(ep) { return { ...ep }; })
+        };
+      })
     };
   }
   presetName = preset.name || 'unnamed';
@@ -2517,18 +2495,6 @@ function initUI() {
     });
   }
 
-  // Nebula toggle
-  const nebulaCheck = document.getElementById('p-nebulaEnabled');
-  const nebulaLabelN = document.getElementById('v-nebulaEnabled');
-  if (nebulaCheck) {
-    nebulaCheck.checked = params.nebulaEnabled;
-    nebulaLabelN.textContent = params.nebulaEnabled ? 'On' : 'Off';
-    nebulaCheck.addEventListener('change', () => {
-      params.nebulaEnabled = nebulaCheck.checked;
-      nebulaLabelN.textContent = nebulaCheck.checked ? 'On' : 'Off';
-    });
-  }
-
   // Hue cycle toggle
   const hueCheck = document.getElementById("p-hueCycle");
   const hueLabel2 = document.getElementById("v-hueCycle");
@@ -2568,17 +2534,17 @@ function initUI() {
   // Palette select
   const paletteSelect = document.getElementById('p-palette');
   if (paletteSelect) {
-    paletteSelect.value = 'custom';
+    paletteSelect.value = params.palette || 'custom';
     paletteSelect.addEventListener('change', () => {
       const pal = PALETTES[paletteSelect.value];
       if (pal && pal.colors.length >= 2) {
         params.color = pal.colors[0];
         params.colorSecondary = pal.colors[1] || pal.colors[0];
+        params.palette = paletteSelect.value;
         document.getElementById('p-color').value = params.color;
         document.getElementById('v-color').textContent = params.color;
         document.getElementById('p-colorSecondary').value = params.colorSecondary;
         document.getElementById('v-colorSecondary').textContent = params.colorSecondary;
-        paletteSelect.value = 'custom'; // reset to custom after applying
       }
     });
   }
@@ -2671,10 +2637,18 @@ function initUI() {
   // Panel collapse
   const panel = document.getElementById('editor-panel');
   const toggle = document.getElementById('panel-toggle');
-  toggle?.addEventListener('click', () => {
+  const headerToggle = document.getElementById('btn-toggle-collapse');
+  const restoreBtn = document.getElementById('panel-restore');
+  function togglePanel() {
     panel.classList.toggle('collapsed');
-    toggle.textContent = panel.classList.contains('collapsed') ? '▶' : '◀';
-  });
+    const collapsed = panel.classList.contains('collapsed');
+    const arrow = collapsed ? '◀' : '▶';
+    if (toggle) toggle.textContent = arrow;
+    if (headerToggle) headerToggle.textContent = arrow;
+  }
+  toggle?.addEventListener('click', togglePanel);
+  headerToggle?.addEventListener('click', togglePanel);
+  restoreBtn?.addEventListener('click', togglePanel);
 
   // Render preset list
   renderPresetList();
@@ -2871,7 +2845,7 @@ function updateUI() {
   cb('p-audioEnabled', 'audioEnabled');
   // Drag
   cb('p-dragEnabled', 'dragEnabled');
-  cb('p-nebulaEnabled', 'nebulaEnabled');
+  cb('p-starfieldEnabled', 'starfieldEnabled');
   cb("p-hueCycle", "hueCycle");
   cb("p-strobeEnabled", "strobeEnabled");
   cb("p-swirlEnabled", "swirlEnabled");
@@ -3223,21 +3197,21 @@ function applyPostProcessing(p) {
   // Bloom: half-res blur + additive composite
   if (p.bloom && p.bloomIntensity > 0 && typeof ctx.filter !== 'undefined') {
     var hw = Math.ceil(W / 2), hh = Math.ceil(H / 2);
-    if (!ppCache || ppCache.width !== hw || ppCache.height !== hh) {
+    if (!ppCache || ppCache.width !== renderCanvas.width || ppCache.height !== renderCanvas.height) {
       ppCache = document.createElement('canvas');
-      ppCache.width = hw;
-      ppCache.height = hh;
+      ppCache.width = renderCanvas.width;
+      ppCache.height = renderCanvas.height;
     }
     var pc = ppCache.getContext('2d');
-    pc.clearRect(0, 0, hw, hh);
-    pc.drawImage(canvas, 0, 0, W, H, 0, 0, hw, hh);
+    pc.clearRect(0, 0, ppCache.width, ppCache.height);
+    pc.drawImage(renderCanvas, 0, 0);
     pc.filter = 'blur(' + Math.round(4 + p.bloomIntensity * 10) + 'px)';
     pc.globalCompositeOperation = 'source-over';
     pc.drawImage(ppCache, 0, 0);
     pc.filter = 'none';
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = p.bloomIntensity * 0.6;
-    ctx.drawImage(ppCache, 0, 0, hw, hh, 0, 0, W, H);
+    ctx.drawImage(ppCache, 0, 0, ppCache.width, ppCache.height, 0, 0, W, H);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
   }
@@ -4140,10 +4114,12 @@ function frame(t) {
       }
 
       // Core particles (skip cold)
+      var rgb1core = hexToRgb(p.color);
+      var rgb2core = p.colorSecondary && p.colorMode !== 'solid' ? hexToRgb(p.colorSecondary) : null;
       for (const pp of projected) {
         if (pp.pt && pp.pt.flame < -0.01) continue;
         ctx.globalAlpha = Math.max(0.3, Math.min(1, pp.alpha));
-        ctx.fillStyle = LOGO_COLOR;
+        ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px, py: pp.py, phase: pp.pt ? pp.pt.phase : 0}, p, rgb1core, rgb2core) : LOGO_COLOR;
         ctx.beginPath();
         ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
         ctx.fill();
@@ -4368,6 +4344,13 @@ function frame(t) {
 
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
+
+    // ── Blit half-res offscreen to main canvas ──
+    ctx = mainCtx;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(renderCanvas, 0, 0, hw, hh, 0, 0, W, H);
+
     applyPostProcessing(p);
     
     // Strobe flash overlay
@@ -4486,6 +4469,7 @@ function triggerAction(action) {
     if (edgeParticles[idx]) { edgeParticles[idx].flame = 2.0; params.flameEnabled = true; }
   } else if (action === 'lightning') {
     params.lightningEnabled = true;
+    spawnChainLightning();
   } else if (action === "burst") {
     const f = params.burstForce || 5;
     for (const p of particles) { p.vx = (Math.random()-0.5)*f; p.vy = (Math.random()-0.5)*f; p.vz = (Math.random()-0.5)*f*0.3; }

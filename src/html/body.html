@@ -14,7 +14,7 @@
 
 <!-- ── Playback hamburger menu ───────────────── -->
 <div id="pmenu">
-  <button id="pmenu-btn">☰</button>
+  <button id="pmenu-btn">FX</button>
   <div id="pmenu-items">
     <div class="pmenu-row" data-action="ice">
       <span class="pmenu-label">❄️ Ice</span>
@@ -215,12 +215,6 @@
                     <div class="audio-meter-bar" id="audio-meter-treble"></div>
                   </div>
                 </div>
-                <div class="param-row"><label>Nebula</label>
-                  <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
-                    <input type="checkbox" id="p-nebulaEnabled" style="accent-color:var(--accent)">
-                    <span style="font-size:11px;opacity:.5" id="v-nebulaEnabled">Off</span>
-                  </label>
-                </div>
                 <div class="param-row"><label>Drag Rotate</label>
                   <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
                     <input type="checkbox" id="p-dragEnabled" style="accent-color:var(--accent)">
@@ -369,3 +363,6 @@
 
       <button class="panel-toggle" id="panel-toggle" title="Collapse">◀</button>
 </div>
+
+<!-- ── Restore button (visible when panel collapsed) ── -->
+<button class="panel-restore" id="panel-restore" title="Show panel">☰</button>
