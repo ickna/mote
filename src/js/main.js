@@ -42,7 +42,12 @@ const DEFAULT_PARAMS = {
   depthFade: 0.6,
   color: '#e03030',
   colorSecondary: '#7b2ff7',
+  colorTertiary: '#ff8800',
   colorMode: 'solid',
+  colorCurve: 'linear',
+  colorCurveMid: 0.5,
+  colorAnimEnabled: false,
+  colorAnimSpeed: 0.5,
   palette: 'custom',
   scale: 0.90,
   renderMode: 'ickna',
@@ -56,8 +61,17 @@ const DEFAULT_PARAMS = {
   // Misc
   transitionDuration: 800,
   lineThreshold: 60,
+  // Color mapping params
+  colorParams: {
+    angularOffset: 0,
+    waveFreq: 1,
+    radialStretch: 1,
+    edgeScale: 50,
+    velocityScale: 3,
+  },
   // Animation
   anim: {},
+  colorAnimPhase: 0,
   // Post-processing
   bloom: false,
   bloomIntensity: 0.4,
@@ -115,25 +129,42 @@ function lerpRgb(rgb1, rgb2, t) {
   return `rgb(${Math.round(rgb1.r + (rgb2.r - rgb1.r) * t2)},${Math.round(rgb1.g + (rgb2.g - rgb1.g) * t2)},${Math.round(rgb1.b + (rgb2.b - rgb1.b) * t2)})`;
 }
 
-function getParticleColor(pt, p, rgb1, rgb2) {
+function getParticleColor(pt, p, rgb1, rgb2, rgb3) {
 
 // HSL color cycling
 function hueShift(hex,delta){const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s,l=(mx+mn)/2;if(mx!==mn){const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);h=mx===r?((g-b)/d+(g<b?6:0))/6:mx===g?((b-r)/d+2)/6:((r-g)/d+4)/6;}h=(h+delta)%1;if(h<0)h+=1;const h2r=(p,q,t)=>{if(t<0)t+=1;if(t>1)t-=1;return t<1/6?p+(q-p)*6*t:t<1/2?q:t<2/3?p+(q-p)*(2/3-t)*6:p;};const q=l<.5?l*(1+s):l+s-l*s,p2=2*l-q,nr=Math.round(h2r(p2,q,h+1/3)*255),ng=Math.round(h2r(p2,q,h)*255),nb=Math.round(h2r(p2,q,h-1/3)*255);return"#"+[nr,ng,nb].map(v=>Math.max(0,Math.min(255,v)).toString(16).padStart(2,"0")).join("");}
-  if (p.colorMode === 'solid' || !rgb2) return p.color;
-  let t;
+  if (p.colorMode === 'solid') return p.color;
+  var cp = p.colorParams || {};
+  var anim = p.colorAnimEnabled ? (p.colorAnimPhase || 0) : 0;
+  var spd = p.colorAnimSpeed || 0.5;
+  var t;
   switch (p.colorMode) {
     case 'gradient-z': t = (pt.z + 100) / 400; break;
-    case 'gradient-position': t = Math.min(1, Math.sqrt(pt.px * pt.px + pt.py * pt.py) / Math.max(1, (pt.cx || 400))); break;
-    case 'gradient-angular': t = (Math.atan2(pt.py, pt.px) / (Math.PI * 2) + 0.5); break;
-    case 'gradient-wave': t = 0.5 + 0.5 * Math.sin(Math.sqrt(pt.px * pt.px + pt.py * pt.py) * 0.008 + pt.phase); break;
-    case 'gradient-edge': t = (pt.pt && pt.pt.edgeDist !== undefined) ? Math.min(1, (pt.pt.edgeDist || 0) / 50) : 0.5; break;
-    case 'gradient-velocity': t = pt.pt ? Math.min(1, Math.sqrt(((pt.pt.vx||0)*(pt.pt.vx||0) + (pt.pt.vy||0)*(pt.pt.vy||0))) * 3) : 0.5; break;
+    case 'gradient-position': t = Math.min(1, Math.sqrt(pt.px * pt.px + pt.py * pt.py) / Math.max(1, ((pt.cx || 400) * (cp.radialStretch || 1)))); break;
+    case 'gradient-angular': t = (Math.atan2(pt.py, pt.px) / (Math.PI * 2) + 0.5 + (cp.angularOffset || 0) + anim * spd) % 1; break;
+    case 'gradient-wave': t = 0.5 + 0.5 * Math.sin(Math.sqrt(pt.px * pt.px + pt.py * pt.py) * 0.008 * (cp.waveFreq || 1) + pt.phase + anim * spd * 2); break;
+    case 'gradient-edge': t = (pt.pt && pt.pt.edgeDist !== undefined) ? Math.min(1, (pt.pt.edgeDist || 0) / (cp.edgeScale || 50)) : 0.5; break;
+    case 'gradient-velocity': t = pt.pt ? Math.min(1, Math.sqrt(((pt.pt.vx||0)*(pt.pt.vx||0) + (pt.pt.vy||0)*(pt.pt.vy||0))) * (cp.velocityScale || 3)) : 0.5; break;
     case 'gradient-y': t = 0.5 - pt.py / (pt.cy ? pt.cy * 2 : 700); break;
     case 'gradient-x': t = 0.5 + pt.px / (pt.cx ? pt.cx * 2 : 1200); break;
     case 'gradient-random': t = (pt.phase / (Math.PI * 2)); break;
     default: return p.color;
   }
-  return lerpRgb(rgb1, rgb2, t);
+  // Apply curve
+  var mid = p.colorCurveMid || 0.5;
+  switch (p.colorCurve) {
+    case 'ease-in': t = t * t; break;
+    case 'ease-out': t = 1 - (1 - t) * (1 - t); break;
+    case 's-curve': t = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; break;
+    case 'posterize': t = Math.round(t * 4) / 4; break;
+    case 'midpoint': t = t < mid ? (t / mid) * 0.5 : 0.5 + (t - mid) / (1 - mid) * 0.5; break;
+  }
+  t = Math.max(0, Math.min(1, t));
+  // 3-color lerp if rgb3 provided
+  if (rgb2 && rgb2.r !== undefined) {
+    return lerpRgb(rgb1, rgb2, t);
+  }
+  return p.color;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1308,7 +1339,10 @@ function frame(t) {
     var s2 = 0.5;
     ctx.scale(s2, s2);
 
-    const p = animEvaluate(params, params.anim, t - animStartTime);
+    var colorAnimPhase = params.colorAnimPhase || 0;
+    if (params.colorAnimEnabled) { colorAnimPhase += 0.016 * (params.colorAnimSpeed || 0.5); params.colorAnimPhase = colorAnimPhase; }
+    var p = animEvaluate(params, params.anim, t - animStartTime);
+    p.colorAnimPhase = colorAnimPhase;
 
     // Reset CSS filter from previous frame's color grade
     canvas.style.filter = '';
@@ -1538,10 +1572,11 @@ function frame(t) {
       // Core particles (skip cold)
       var rgb1core = hexToRgb(p.color);
       var rgb2core = p.colorSecondary && p.colorMode !== 'solid' ? hexToRgb(p.colorSecondary) : null;
+      var rgb3core = p.colorTertiary && p.colorMode !== 'solid' ? hexToRgb(p.colorTertiary) : null;
       for (const pp of projected) {
         if (pp.pt && pp.pt.flame < -0.01) continue;
         ctx.globalAlpha = Math.max(0.3, Math.min(1, pp.alpha));
-        ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core) : LOGO_COLOR;
+        ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core, rgb3core) : LOGO_COLOR;
         ctx.beginPath();
         ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
         ctx.fill();
@@ -1572,7 +1607,7 @@ function frame(t) {
             // Tint with base particle color (or gradient color)
             ctx.globalCompositeOperation = 'source-atop';
             ctx.globalAlpha = 0.5;
-            ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core) : LOGO_COLOR;
+            ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core, rgb3core) : LOGO_COLOR;
             ctx.beginPath();
             ctx.arc(pp.px, pp.py, adjGlowSize, 0, Math.PI * 2);
             ctx.fill();
@@ -1607,7 +1642,7 @@ function frame(t) {
         ctx.shadowBlur = p.glowBlur;
         for (const pp of projected) {
           ctx.globalAlpha = Math.max(0.15, Math.min(1, pp.alpha));
-          ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core) : LOGO_COLOR;
+          ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core, rgb3core) : LOGO_COLOR;
           ctx.beginPath();
           ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
           ctx.fill();
@@ -2294,6 +2329,8 @@ const paramBindings = [
   { id: 'edgeLineAlpha', el: 'p-edgeLineAlpha', val: 'v-edgeLineAlpha', min: 0, max: 1, step: 0.02 },
   { id: 'lineThreshold', el: 'p-lineThreshold', val: 'v-lineThreshold', min: 20, max: 200, step: 2 },
   { id: 'transitionDuration', el: 'p-transitionDuration', val: 'v-transitionDuration', min: 0, max: 3000, step: 100 },
+  { id: 'colorAnimSpeed', el: 'p-colorAnimSpeed', val: 'v-colorAnimSpeed', min: 0.1, max: 3, step: 0.1 },
+  { id: 'colorCurveMid', el: 'p-colorCurveMid', val: 'v-colorCurveMid', min: 0.05, max: 0.95, step: 0.05 },
   { id: "hueCycleSpeed", el: "p-hueCycleSpeed", val: "v-hueCycleSpeed", min: 0.05, max: 3, step: 0.05 },
   { id: "strobeRate", el: "p-strobeRate", val: "v-strobeRate", min: 1, max: 30, step: 1 },
   { id: "swirlIntensity", el: "p-swirlIntensity", val: "v-swirlIntensity", min: 0, max: 1, step: 0.02 },
@@ -2507,10 +2544,64 @@ function initUI() {
   if (colorModeSelect) {
     colorModeSelect.value = params.colorMode;
     updateSecondaryColorVisibility(params.colorMode);
+    updateColorVisibility(params.colorMode);
     colorModeSelect.addEventListener('change', () => {
       params.colorMode = colorModeSelect.value;
       updateSecondaryColorVisibility(params.colorMode);
+      updateColorVisibility(params.colorMode);
     });
+  }
+
+  // Tertiary color picker
+  const color3Input = document.getElementById('p-colorTertiary');
+  const color3Val = document.getElementById('v-colorTertiary');
+  if (color3Input) {
+    color3Input.value = params.colorTertiary;
+    if (color3Val) color3Val.textContent = params.colorTertiary;
+    color3Input.addEventListener('input', () => {
+      params.colorTertiary = color3Input.value;
+      if (color3Val) color3Val.textContent = color3Input.value;
+    });
+  }
+
+  // Color curve select
+  var curveSelect = document.getElementById('p-colorCurve');
+  if (curveSelect) {
+    curveSelect.value = params.colorCurve;
+    curveSelect.addEventListener('change', function() { params.colorCurve = curveSelect.value; });
+  }
+
+  // Color anim toggle
+  var cAnimCheck = document.getElementById('p-colorAnimEnabled');
+  var cAnimLabel = document.getElementById('v-colorAnimEnabled');
+  if (cAnimCheck) {
+    cAnimCheck.checked = params.colorAnimEnabled;
+    if (cAnimLabel) cAnimLabel.textContent = params.colorAnimEnabled ? 'On' : 'Off';
+    cAnimCheck.addEventListener('change', function() {
+      params.colorAnimEnabled = cAnimCheck.checked;
+      if (cAnimLabel) cAnimLabel.textContent = cAnimCheck.checked ? 'On' : 'Off';
+    });
+  }
+
+  // Color params sliders (prefix p-cp-)
+  var cpSliders = [
+    {el:'p-cp-angularOffset', key:'angularOffset'},
+    {el:'p-cp-waveFreq', key:'waveFreq'},
+    {el:'p-cp-radialStretch', key:'radialStretch'},
+    {el:'p-cp-edgeScale', key:'edgeScale'},
+    {el:'p-cp-velocityScale', key:'velocityScale'},
+  ];
+  for (var si = 0; si < cpSliders.length; si++) {
+    var sl = cpSliders[si];
+    var inp = document.getElementById(sl.el);
+    var val = document.getElementById('v-' + sl.el.slice(2));
+    if (inp) {
+      inp.value = params.colorParams[sl.key];
+      if (val) val.textContent = inp.value;
+      inp.addEventListener('input', (function(k, v, i2) {
+        return function() { params.colorParams[k] = parseFloat(i2.value); if (v) v.textContent = i2.value; };
+      })(sl.key, val, inp));
+    }
   }
 
   // Secondary color picker
@@ -2792,6 +2883,23 @@ function updateSecondaryColorVisibility(mode) {
   const row = document.querySelector('.color-secondary-row');
   if (row) row.style.display = (mode !== 'solid') ? '' : 'none';
 }
+function updateColorVisibility(mode) {
+  // Show/hide color 3, curve, animation, and per-mode params
+  var show = mode !== 'solid';
+  var rows = document.querySelectorAll('.color-tertiary-row, .color-curve-row, .color-anim-row');
+  for (var i = 0; i < rows.length; i++) rows[i].style.display = show ? '' : 'none';
+  // Per-mode params
+  var ap = document.querySelector('.color-params-angular');
+  var wp = document.querySelector('.color-params-wave');
+  var rp = document.querySelector('.color-params-radial');
+  var ep = document.querySelector('.color-params-edge');
+  var vp = document.querySelector('.color-params-velocity');
+  if (ap) ap.style.display = (mode === 'gradient-angular') ? '' : 'none';
+  if (wp) wp.style.display = (mode === 'gradient-wave') ? '' : 'none';
+  if (rp) rp.style.display = (mode === 'gradient-position') ? '' : 'none';
+  if (ep) ep.style.display = (mode === 'gradient-edge') ? '' : 'none';
+  if (vp) vp.style.display = (mode === 'gradient-velocity') ? '' : 'none';
+}
 
 function updateLineThresholdVisibility(mode) {
   const row = document.querySelector('.line-threshold-row');
@@ -2853,7 +2961,33 @@ function updateUI() {
   const color2Val = document.getElementById('v-colorSecondary');
   if (color2Input) { color2Input.value = params.colorSecondary; color2Val.textContent = params.colorSecondary; }
   updateSecondaryColorVisibility(params.colorMode);
+  updateColorVisibility(params.colorMode);
   updateLineThresholdVisibility(params.renderMode);
+  // Color 3
+  var c3i = document.getElementById('p-colorTertiary');
+  var c3v = document.getElementById('v-colorTertiary');
+  if (c3i) { c3i.value = params.colorTertiary; if (c3v) c3v.textContent = params.colorTertiary; }
+  // Curve
+  var cs = document.getElementById('p-colorCurve');
+  if (cs) cs.value = params.colorCurve;
+  var cm = document.getElementById('p-colorCurveMid');
+  var cmv = document.getElementById('v-colorCurveMid');
+  if (cm) { cm.value = params.colorCurveMid; if (cmv) cmv.textContent = cm.value; }
+  // Color anim
+  var ca = document.getElementById('p-colorAnimEnabled');
+  var cal = document.getElementById('v-colorAnimEnabled');
+  if (ca) { ca.checked = params.colorAnimEnabled; if (cal) cal.textContent = params.colorAnimEnabled ? 'On' : 'Off'; }
+  var cas = document.getElementById('p-colorAnimSpeed');
+  var casv = document.getElementById('v-colorAnimSpeed');
+  if (cas) { cas.value = params.colorAnimSpeed; if (casv) casv.textContent = cas.value; }
+  // Color params
+  var cpKeys = ['angularOffset','waveFreq','radialStretch','edgeScale','velocityScale'];
+  for (var ci = 0; ci < cpKeys.length; ci++) {
+    var k = cpKeys[ci];
+    var el = document.getElementById('p-cp-' + k);
+    var vl = document.getElementById('v-cp-' + k);
+    if (el) { el.value = params.colorParams[k]; if (vl) vl.textContent = el.value; }
+  }
   updateConditionalUI();
 }
 
@@ -3104,22 +3238,39 @@ function lerpRgb(rgb1, rgb2, t) {
   const t2 = Math.max(0, Math.min(1, t));
   return 'rgb(' + Math.round(rgb1.r + (rgb2.r - rgb1.r) * t2) + ',' + Math.round(rgb1.g + (rgb2.g - rgb1.g) * t2) + ',' + Math.round(rgb1.b + (rgb2.b - rgb1.b) * t2) + ')';
 }
-function getParticleColor(pt, p, rgb1, rgb2) {
-  if (p.colorMode === 'solid' || !rgb2) return p.color;
-  let t;
+function getParticleColor(pt, p, rgb1, rgb2, rgb3) {
+  if (p.colorMode === 'solid') return p.color;
+  var cp = p.colorParams || {};
+  var anim = p.colorAnimEnabled ? (p.colorAnimPhase || 0) : 0;
+  var spd = p.colorAnimSpeed || 0.5;
+  var t;
   switch (p.colorMode) {
     case 'gradient-z': t = (pt.z + 100) / 400; break;
-    case 'gradient-position': t = Math.min(1, Math.sqrt(pt.px * pt.px + pt.py * pt.py) / Math.max(1, (pt.cx || 400))); break;
-    case 'gradient-angular': t = (Math.atan2(pt.py, pt.px) / (Math.PI * 2) + 0.5); break;
-    case 'gradient-wave': t = 0.5 + 0.5 * Math.sin(Math.sqrt(pt.px * pt.px + pt.py * pt.py) * 0.008 + pt.phase); break;
-    case 'gradient-edge': t = (pt.pt && pt.pt.edgeDist !== undefined) ? Math.min(1, (pt.pt.edgeDist || 0) / 50) : 0.5; break;
-    case 'gradient-velocity': t = pt.pt ? Math.min(1, Math.sqrt(((pt.pt.vx||0)*(pt.pt.vx||0) + (pt.pt.vy||0)*(pt.pt.vy||0))) * 3) : 0.5; break;
+    case 'gradient-position': t = Math.min(1, Math.sqrt(pt.px * pt.px + pt.py * pt.py) / Math.max(1, ((pt.cx || 400) * (cp.radialStretch || 1)))); break;
+    case 'gradient-angular': t = (Math.atan2(pt.py, pt.px) / (Math.PI * 2) + 0.5 + (cp.angularOffset || 0) + anim * spd) % 1; break;
+    case 'gradient-wave': t = 0.5 + 0.5 * Math.sin(Math.sqrt(pt.px * pt.px + pt.py * pt.py) * 0.008 * (cp.waveFreq || 1) + pt.phase + anim * spd * 2); break;
+    case 'gradient-edge': t = (pt.pt && pt.pt.edgeDist !== undefined) ? Math.min(1, (pt.pt.edgeDist || 0) / (cp.edgeScale || 50)) : 0.5; break;
+    case 'gradient-velocity': t = pt.pt ? Math.min(1, Math.sqrt(((pt.pt.vx||0)*(pt.pt.vx||0) + (pt.pt.vy||0)*(pt.pt.vy||0))) * (cp.velocityScale || 3)) : 0.5; break;
     case 'gradient-y': t = 0.5 - pt.py / (pt.cy ? pt.cy * 2 : 700); break;
     case 'gradient-x': t = 0.5 + pt.px / (pt.cx ? pt.cx * 2 : 1200); break;
     case 'gradient-random': t = (pt.phase / (Math.PI * 2)); break;
     default: return p.color;
   }
-  return lerpRgb(rgb1, rgb2, t);
+  // Apply curve
+  var mid = p.colorCurveMid || 0.5;
+  switch (p.colorCurve) {
+    case 'ease-in': t = t * t; break;
+    case 'ease-out': t = 1 - (1 - t) * (1 - t); break;
+    case 's-curve': t = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; break;
+    case 'posterize': t = Math.round(t * 4) / 4; break;
+    case 'midpoint': t = t < mid ? (t / mid) * 0.5 : 0.5 + (t - mid) / (1 - mid) * 0.5; break;
+  }
+  t = Math.max(0, Math.min(1, t));
+  // 3-color lerp if rgb3 provided
+  if (rgb2 && rgb2.r !== undefined) {
+    return lerpRgb(rgb1, rgb2, t);
+  }
+  return p.color;
 }
 
 // -- Animator system (backtick-safe, no template literals) --
@@ -4115,10 +4266,11 @@ function frame(t) {
       // Core particles (skip cold)
       var rgb1core = hexToRgb(p.color);
       var rgb2core = p.colorSecondary && p.colorMode !== 'solid' ? hexToRgb(p.colorSecondary) : null;
+      var rgb3core = p.colorTertiary && p.colorMode !== 'solid' ? hexToRgb(p.colorTertiary) : null;
       for (const pp of projected) {
         if (pp.pt && pp.pt.flame < -0.01) continue;
         ctx.globalAlpha = Math.max(0.3, Math.min(1, pp.alpha));
-        ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core) : LOGO_COLOR;
+        ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core, rgb3core) : LOGO_COLOR;
         ctx.beginPath();
         ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
         ctx.fill();
@@ -4183,7 +4335,7 @@ function frame(t) {
         ctx.shadowBlur = p.glowBlur;
         for (const pp of projected) {
           ctx.globalAlpha = Math.max(0.15, Math.min(1, pp.alpha));
-          ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core) : LOGO_COLOR;
+          ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px - cx, py: pp.py - cy, phase: pp.pt ? pp.pt.phase : 0, pt: pp.pt || {}, cx: cx, cy: cy}, p, rgb1core, rgb2core, rgb3core) : LOGO_COLOR;
           ctx.beginPath();
           ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
           ctx.fill();

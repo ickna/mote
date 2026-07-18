@@ -115,6 +115,30 @@
                     <option value="monochrome">Monochrome</option>
                   </select>
                 </div>
+                <div class="param-row color-tertiary-row" style="display:none"><label>Color 3</label><input type="color" id="p-colorTertiary"><span class="param-val" id="v-colorTertiary"></span></div>
+                <div class="param-row color-curve-row" style="display:none"><label>Curve</label>
+                  <select id="p-colorCurve" style="flex:1;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:11px;font-family:inherit">
+                    <option value="linear">Linear</option>
+                    <option value="ease-in">Ease In</option>
+                    <option value="ease-out">Ease Out</option>
+                    <option value="s-curve">S-Curve</option>
+                    <option value="posterize">Posterize</option>
+                    <option value="midpoint">Midpoint</option>
+                  </select>
+                </div>
+                <div class="param-row color-curve-row" style="display:none"><label>Curve Mid</label><input type="range" id="p-colorCurveMid" min="0.05" max="0.95" step="0.05"><span class="param-val" id="v-colorCurveMid"></span></div>
+                <div class="param-row color-anim-row" style="display:none"><label>Anim Color</label>
+                  <label style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="checkbox" id="p-colorAnimEnabled" style="accent-color:var(--accent)">
+                    <span style="font-size:11px;opacity:.5" id="v-colorAnimEnabled">Off</span>
+                  </label>
+                </div>
+                <div class="param-row color-anim-row" style="display:none"><label>Anim Speed</label><input type="range" id="p-colorAnimSpeed" min="0.1" max="3" step="0.1"><span class="param-val" id="v-colorAnimSpeed"></span></div>
+                <div class="param-row color-params-angular" style="display:none"><label>A Offset</label><input type="range" id="p-cp-angularOffset" min="-1" max="1" step="0.01"><span class="param-val" id="v-cp-angularOffset"></span></div>
+                <div class="param-row color-params-wave" style="display:none"><label>W Freq</label><input type="range" id="p-cp-waveFreq" min="0.1" max="5" step="0.1"><span class="param-val" id="v-cp-waveFreq"></span></div>
+                <div class="param-row color-params-radial" style="display:none"><label>R Stretch</label><input type="range" id="p-cp-radialStretch" min="0.2" max="3" step="0.1"><span class="param-val" id="v-cp-radialStretch"></span></div>
+                <div class="param-row color-params-edge" style="display:none"><label>E Scale</label><input type="range" id="p-cp-edgeScale" min="10" max="200" step="5"><span class="param-val" id="v-cp-edgeScale"></span></div>
+                <div class="param-row color-params-velocity" style="display:none"><label>V Scale</label><input type="range" id="p-cp-velocityScale" min="1" max="10" step="0.5"><span class="param-val" id="v-cp-velocityScale"></span></div>
                 <div class="param-row"><label>Scale</label><input type="range" id="p-scale" min="0.1" max="1.5" step="0.05"><span class="param-val" id="v-scale"></span></div>
                 <div class="param-row"><label>Render Mode</label>
                   <select id="p-renderMode" style="flex:1;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:11px;font-family:inherit">
