@@ -2073,10 +2073,10 @@ function frame(t) {
             ctx.globalCompositeOperation = 'source-over';
             ctx.globalAlpha = 1;
           } else {
-            // Tint with base particle color
+            // Tint with base particle color (or gradient color)
             ctx.globalCompositeOperation = 'source-atop';
             ctx.globalAlpha = 0.5;
-            ctx.fillStyle = LOGO_COLOR;
+            ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px, py: pp.py, phase: pp.pt ? pp.pt.phase : 0}, p, rgb1core, rgb2core) : LOGO_COLOR;
             ctx.beginPath();
             ctx.arc(pp.px, pp.py, adjGlowSize, 0, Math.PI * 2);
             ctx.fill();
