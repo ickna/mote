@@ -1601,7 +1601,7 @@ function frame(t) {
         ctx.shadowBlur = p.glowBlur;
         for (const pp of projected) {
           ctx.globalAlpha = Math.max(0.15, Math.min(1, pp.alpha));
-          ctx.fillStyle = LOGO_COLOR;
+          ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px, py: pp.py, phase: pp.pt ? pp.pt.phase : 0}, p, rgb1core, rgb2core) : LOGO_COLOR;
           ctx.beginPath();
           ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
           ctx.fill();
@@ -4184,7 +4184,7 @@ function frame(t) {
         ctx.shadowBlur = p.glowBlur;
         for (const pp of projected) {
           ctx.globalAlpha = Math.max(0.15, Math.min(1, pp.alpha));
-          ctx.fillStyle = LOGO_COLOR;
+          ctx.fillStyle = (p.colorMode !== 'solid' && rgb2core) ? getParticleColor({z: pp.z, px: pp.px, py: pp.py, phase: pp.pt ? pp.pt.phase : 0}, p, rgb1core, rgb2core) : LOGO_COLOR;
           ctx.beginPath();
           ctx.arc(pp.px, pp.py, Math.max(pp.r, 0.5), 0, Math.PI * 2);
           ctx.fill();
